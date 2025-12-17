@@ -1,0 +1,2 @@
+CREATE USER [TPSadmin] FOR LOGIN [TPSadmin]
+GO

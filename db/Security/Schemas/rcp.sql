@@ -1,0 +1,3 @@
+CREATE SCHEMA [rcp]
+AUTHORIZATION [dbo]
+GO

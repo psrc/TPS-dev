@@ -1,0 +1,2 @@
+CREATE USER [TPSuser] FOR LOGIN [TPSuser]
+GO
