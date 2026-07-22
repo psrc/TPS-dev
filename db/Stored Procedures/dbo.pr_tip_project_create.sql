@@ -1,7 +1,8 @@
 SET QUOTED_IDENTIFIER ON
 GO
-SET ANSI_NULLS OFF
+SET ANSI_NULLS ON
 GO
+
 /*
 ==================================================
 Stored Procedure: dbo.pr_tip_project_create
@@ -18,7 +19,7 @@ Parameters:
     @AgencyId (UNIQUEIDENTIFIER) - Agency responsible for the project
     @ProjectCode (NVARCHAR(50)) - Unique project identifier/code
     @Title (NVARCHAR(255)) - Project title/name
-    @Description (NVARCHAR(50)) - Brief project description
+    @Description (NVARCHAR(MAX)) - Project description
     @TipId (UNIQUEIDENTIFIER) - Optional TIP ID to add the project to
 
 Returns: Single row with complete project information including all fields,
@@ -54,17 +55,17 @@ CREATE PROCEDURE [dbo].[pr_tip_project_create]
 ,   @AgencyId    UNIQUEIDENTIFIER -- Agency responsible for project
 ,   @ProjectCode NVARCHAR(50) -- Unique project identifier
 ,   @Title       NVARCHAR(255) -- Project title
-,   @Description NVARCHAR(50) -- Brief project description
+,   @Description NVARCHAR(MAX) -- Project description
 ,   @TipId       UNIQUEIDENTIFIER = NULL -- Optional TIP to add project to
 ) AS
 BEGIN
     SET NOCOUNT ON;
     -- Prevent extra result sets from interfering with SELECT statements
 
-    -- Generate unique identifier for the new project
+    -- Generate a unique identifier for the new project
     DECLARE @Id UNIQUEIDENTIFIER = NEWID();
 
-    -- Insert new project record with basic information
+    -- Insert a new project record with basic information
     INSERT
         INTO
             tip.Project

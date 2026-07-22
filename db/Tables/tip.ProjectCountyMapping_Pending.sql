@@ -3,8 +3,8 @@ CREATE TABLE [tip].[ProjectCountyMapping_Pending]
 [Id] [uniqueidentifier] NOT NULL,
 [ProjectId] [uniqueidentifier] NOT NULL,
 [CountyId] [uniqueidentifier] NOT NULL,
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF__ProjectCo__Creat__22D5121F] DEFAULT (user_name()),
-[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF__ProjectCo__Creat__23C93658] DEFAULT (getutcdate()),
+[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_ProjectCountyMapping_Pending_CreatedById] DEFAULT (user_name()),
+[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_ProjectCountyMapping_Pending_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
 [UpdatedOn] [datetime2] NULL
 ) ON [PRIMARY]

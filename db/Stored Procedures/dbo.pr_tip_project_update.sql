@@ -1,10 +1,13 @@
 SET QUOTED_IDENTIFIER ON
 GO
-SET ANSI_NULLS OFF
+SET ANSI_NULLS ON
 GO
+
 -- =============================================
 -- Author: john.hunter@triskelle.solutions
 -- Create date: 2025-07-02
+-- Modified:    2026-02-20 - Preserve existing month/day for DateCompProject when only year changes
+-- Modified:    2026-04-28 - Added @ReportDescription parameter to persist Reporting tab project-level description
 -- Description: Updates a subset of a TIP (Transportation Improvement Program) project with all related data
 --              including secondary improvement types, county mappings, and programmed funding.
 --              Implements versioning for programmed funding records to maintain audit trail.
@@ -21,6 +24,7 @@ CREATE PROCEDURE [dbo].[pr_tip_project_update]
 ,   @Title                       NVARCHAR(255) -- Project title/name
 ,   @Description                 NVARCHAR(MAX) -- Detailed project description
 ,   @WsDotPin                    NVARCHAR(30) = NULL -- Washington State DOT PIN Identifier
+,   @DemoId                      NVARCHAR(30) = NULL -- Demo ID
 -- Location information
 ,   @Location                    NVARCHAR(255) = NULL -- General project location
 ,   @LocationFrom                NVARCHAR(255) = NULL -- Starting location/point
@@ -35,6 +39,14 @@ CREATE PROCEDURE [dbo].[pr_tip_project_update]
 ,   @FunctionalClassTypeId       UNIQUEIDENTIFIER = NULL -- Functional classification (arterial, local, etc.)
 ,   @PrimaryImprovementTypeId    UNIQUEIDENTIFIER = NULL -- Primary type of improvement
 ,   @SecondaryImprovementTypeIds UniqueIdentifierArrayType READONLY -- Additional improvement types
+-- Year completion fields
+,   @ConstantDollarProjectYear   SMALLINT = NULL -- Constant dollar project year
+,   @YearCompPL                  SMALLINT = NULL -- Year completion - Planning
+,   @YearCompPE                  SMALLINT = NULL -- Year completion - Preliminary Engineering
+,   @YearCompROW                 SMALLINT = NULL -- Year completion - Right of Way
+,   @YearCompCN                  SMALLINT = NULL -- Year completion - Construction
+,   @YearCompOther               SMALLINT = NULL -- Year completion - Other
+,   @YearCompProject             DATE = NULL -- Project completion date
 -- UPWP (Unified Planning Work Program) related fields
 ,   @UpwpObjective               NVARCHAR(MAX) = NULL -- UPWP planning objectives
 ,   @UpwpTasks                   NVARCHAR(MAX) = NULL -- UPWP tasks to be performed
@@ -43,6 +55,7 @@ CREATE PROCEDURE [dbo].[pr_tip_project_update]
 ,   @UpwpIsEquipmentPurchaseFlag BIT = NULL -- Flag indicating equipment purchase
 -- Administrative fields
 ,   @PsrcComments                NVARCHAR(MAX) = NULL -- PSRC (Puget Sound Regional Council) comments
+,   @ReportDescription           NVARCHAR(MAX) = NULL -- Reporting tab project-level description
 ,   @CountyIds                   UniqueIdentifierArrayType READONLY -- Counties where project is located
 ,   @ProgrammedFunds             ProgrammedFundsArrayType READONLY -- Funding information with versioning
 ,   @Budget                      ProjectBudgetArrayType READONLY -- Budget information
@@ -66,6 +79,7 @@ BEGIN
           , Title                       = @Title
           , Description                 = @Description
           , WsDotPin                    = @WsDotPin
+          , DemoId                      = @DemoId
           , Location                    = @Location
           , LocationFrom                = @LocationFrom
           , LocationTo                  = @LocationTo
@@ -77,12 +91,25 @@ BEGIN
           , RegionalSignificanceTypeId  = @RegionalSignificanceTypeId
           , FunctionalClassTypeId       = @FunctionalClassTypeId
           , PrimaryImprovementTypeId    = @PrimaryImprovementTypeId
+          , ConstantDollarProjectYear   = @ConstantDollarProjectYear
+          , YearCompPL                  = @YearCompPL
+          , YearCompPE                  = @YearCompPE
+          , YearCompROW                 = @YearCompROW
+          , YearCompCN                  = @YearCompCN
+          , YearCompOther               = @YearCompOther
+          , DateCompProject             = CASE
+                                            WHEN @YearCompProject IS NULL THEN NULL
+                                            WHEN DateCompProject IS NOT NULL
+                                                THEN DATEFROMPARTS(YEAR(@YearCompProject), MONTH(DateCompProject), DAY(DateCompProject))
+                                            ELSE @YearCompProject
+                                          END
           , UpwpObjective               = @UpwpObjective
           , UpwpTasks                   = @UpwpTasks
           , UpwpProducts                = @UpwpProducts
           , UpwpPolicy                  = @UpwpPolicy
           , UpwpIsEquipmentPurchaseFlag = @UpwpIsEquipmentPurchaseFlag
           , PsrcComments                = @PsrcComments
+          , ReportDescription           = @ReportDescription
           , UpdatedById                 = @UserId
           , UpdatedOn                   = GETUTCDATE()
             WHERE
@@ -148,7 +175,6 @@ BEGIN
             BEGIN
                 -- Step 1: Identify records that need versioning (existing records being updated)
                 ;WITH
-
                     ExistingActiveRecords AS (SELECT
                                                   ExistingId       = existing.Id
                                                 , IncomingId       = incoming.Id

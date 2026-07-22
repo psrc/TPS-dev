@@ -8,7 +8,5 @@ CREATE TABLE [common].[UserTokens]
 GO
 ALTER TABLE [common].[UserTokens] ADD CONSTRAINT [PK_identity_UserTokens] PRIMARY KEY CLUSTERED ([UserId], [LoginProvider], [Name]) ON [PRIMARY]
 GO
-ALTER TABLE [common].[UserTokens] ADD CONSTRAINT [FK_common_UserTokens_common_Users_UserId] FOREIGN KEY ([UserId]) REFERENCES [common].[Users] ([Id])
-GO
 ALTER TABLE [common].[UserTokens] ADD CONSTRAINT [FK_UserTokens_Users_UserId] FOREIGN KEY ([UserId]) REFERENCES [common].[Users] ([Id]) ON DELETE CASCADE
 GO

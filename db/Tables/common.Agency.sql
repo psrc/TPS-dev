@@ -11,10 +11,11 @@ CREATE TABLE [common].[Agency]
 [AppendixAGroup] [smallint] NULL,
 [PlaceAggregated] [nvarchar] (60) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 [IsActive] [bit] NULL,
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF__Agency__CreatedB__6F8A7843] DEFAULT (user_name()),
-[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF__Agency__CreatedO__707E9C7C] DEFAULT (getutcdate()),
+[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_Agency_CreatedById] DEFAULT (user_name()),
+[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_Agency_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
-[UpdatedOn] [datetime2] NULL
+[UpdatedOn] [datetime2] NULL,
+[PrimaryContactUserId] [uniqueidentifier] NULL
 ) ON [PRIMARY]
 GO
 ALTER TABLE [common].[Agency] ADD CONSTRAINT [PK_Agency_Id] PRIMARY KEY CLUSTERED ([Id]) ON [PRIMARY]

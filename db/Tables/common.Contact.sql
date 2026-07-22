@@ -7,10 +7,10 @@ CREATE TABLE [common].[Contact]
 [Phone] [nvarchar] (15) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 [PhoneExt] [nvarchar] (50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 [AgencyId] [uniqueidentifier] NULL,
-[IsActive] [bit] NOT NULL CONSTRAINT [DF__Contact__IsActiv__1F398B65] DEFAULT ((1)),
+[IsActive] [bit] NOT NULL CONSTRAINT [DF_Contact_IsActive] DEFAULT ((1)),
 [Notes] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF__Contact__Created__202DAF9E] DEFAULT (user_name()),
-[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF__Contact__Created__2121D3D7] DEFAULT (getutcdate()),
+[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_Contact_CreatedById] DEFAULT (user_name()),
+[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_Contact_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
 [UpdatedOn] [datetime2] NULL
 ) ON [PRIMARY]

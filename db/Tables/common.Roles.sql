@@ -1,11 +1,11 @@
 CREATE TABLE [common].[Roles]
 (
-[Id] [uniqueidentifier] NOT NULL CONSTRAINT [DF__Roles__Id__4BA21D88] DEFAULT (newsequentialid()),
+[Id] [uniqueidentifier] NOT NULL CONSTRAINT [DF_Roles_Id] DEFAULT (newsequentialid()),
 [Name] [nvarchar] (256) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 [NormalizedName] [nvarchar] (256) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 [ConcurrencyStamp] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 [Description] [nvarchar] (500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF__Roles__CreatedOn__4C9641C1] DEFAULT (getutcdate()),
+[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_Roles_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedOn] [datetime2] NULL,
 [CreatedById] [uniqueidentifier] NULL,
 [UpdatedById] [uniqueidentifier] NULL

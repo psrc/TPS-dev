@@ -4,7 +4,7 @@ CREATE TABLE [common].[UserProfile]
 [UserId] [uniqueidentifier] NOT NULL,
 [FullName] [nvarchar] (100) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 [Email] [nvarchar] (250) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF__UserProfi__Creat__668B1DEE] DEFAULT (getutcdate()),
+[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_UserProfile_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedOn] [datetime2] NULL,
 [AppUserId] [uniqueidentifier] NULL,
 [AgencyId] [uniqueidentifier] NULL

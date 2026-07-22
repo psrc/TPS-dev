@@ -3,8 +3,8 @@ CREATE TABLE [common].[AgencyCountyMapping]
 [Id] [uniqueidentifier] NOT NULL,
 [AgencyId] [uniqueidentifier] NOT NULL,
 [CountyId] [uniqueidentifier] NOT NULL,
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF__AgencyCou__Creat__7913E27D] DEFAULT (user_name()),
-[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF__AgencyCou__Creat__7A0806B6] DEFAULT (getutcdate()),
+[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_AgencyCountyMapping_CreatedById] DEFAULT (user_name()),
+[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_AgencyCountyMapping_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
 [UpdatedOn] [datetime2] NULL
 ) ON [PRIMARY]

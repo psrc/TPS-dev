@@ -10,7 +10,5 @@ ALTER TABLE [common].[UserLogins] ADD CONSTRAINT [PK_identity_UserLogins] PRIMAR
 GO
 CREATE NONCLUSTERED INDEX [IX_UserLogins_UserId] ON [common].[UserLogins] ([UserId]) ON [PRIMARY]
 GO
-ALTER TABLE [common].[UserLogins] ADD CONSTRAINT [FK_common_UserLogins_common_Users_UserId] FOREIGN KEY ([UserId]) REFERENCES [common].[Users] ([Id])
-GO
 ALTER TABLE [common].[UserLogins] ADD CONSTRAINT [FK_UserLogins_Users_UserId] FOREIGN KEY ([UserId]) REFERENCES [common].[Users] ([Id]) ON DELETE CASCADE
 GO

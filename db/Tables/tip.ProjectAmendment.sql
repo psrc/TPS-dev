@@ -10,9 +10,14 @@ CREATE TABLE [tip].[ProjectAmendment]
 [ReviewUpdatedById] [uniqueidentifier] NULL,
 [ReviewUpdateDate] [date] NULL,
 [CreatedById] [uniqueidentifier] NOT NULL,
-[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF__ProjectAm__Creat__66C02818] DEFAULT (getutcdate()),
+[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_ProjectAmendment_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
-[UpdatedOn] [datetime2] NULL
+[UpdatedOn] [datetime2] NULL,
+[ReportDescription] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+[ReportProjectTrackingFlag] [bit] NOT NULL CONSTRAINT [DF_ProjectAmendment_ReportProjectTrackingFlag] DEFAULT ((0)),
+[ReportNewProjectPhaseFlag] [bit] NOT NULL CONSTRAINT [DF_ProjectAmendment_ReportNewProjectPhaseFlag] DEFAULT ((0)),
+[ReportUpwpFlag] [bit] NOT NULL CONSTRAINT [DF_ProjectAmendment_ReportUpwpFlag] DEFAULT ((0)),
+[ReportOtherAmendFlag] [bit] NOT NULL CONSTRAINT [DF_ProjectAmendment_ReportOtherAmendFlag] DEFAULT ((0))
 ) ON [PRIMARY]
 GO
 ALTER TABLE [tip].[ProjectAmendment] ADD CONSTRAINT [PK_ProjectAmendment_Id] PRIMARY KEY CLUSTERED ([Id]) ON [PRIMARY]

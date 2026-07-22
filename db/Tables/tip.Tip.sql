@@ -5,10 +5,10 @@ CREATE TABLE [tip].[Tip]
 [BeginYear] [smallint] NOT NULL,
 [EndYear] [smallint] NOT NULL,
 [CreatedById] [uniqueidentifier] NOT NULL,
-[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF__Tip__CreatedOn__583CFE97] DEFAULT (getutcdate()),
+[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_Tip_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
 [UpdatedOn] [datetime2] NULL,
-[IsCurrent] [bit] NOT NULL CONSTRAINT [DF__Tip__IsCurrent__593122D0] DEFAULT ((0))
+[IsCurrent] [bit] NOT NULL CONSTRAINT [DF_Tip_IsCurrent] DEFAULT ((0))
 ) ON [PRIMARY]
 GO
 ALTER TABLE [tip].[Tip] ADD CONSTRAINT [PK_Tip_Id] PRIMARY KEY CLUSTERED ([Id]) ON [PRIMARY]

@@ -1,13 +1,20 @@
 SET QUOTED_IDENTIFIER ON
 GO
-SET ANSI_NULLS OFF
+SET ANSI_NULLS ON
 GO
+
 -- =============================================
 -- Author:      john.hunter@triskelle.solutions
 -- Create date: 2025-07-23
 -- Description: Retrieves comprehensive project information including
 --              project details, contacts, mappings, budgets, amendments,
 --              and funding data for a specified project.
+-- Modified:
+--   2026-02-19  Added MostRecentTipId to core project query.
+--               Expanded Section 6 to include TIP details (label,
+--               description, years, IsCurrent) for project TIP list dialog.
+--   2026-04-28  Added ReportDescription to project select and Reporting tab fields
+--               (ReportDescription + 4 flags) to amendment select.
 -- =============================================
 CREATE PROCEDURE [dbo].[pr_tip_project_get]
     @UserId          UNIQUEIDENTIFIER
@@ -53,20 +60,23 @@ BEGIN
       , UpwpPolicy                  = p.UpwpPolicy
       , UpwpIsEquipmentPurchaseFlag = p.UpwpIsEquipmentPurchaseFlag
       , PsrcComments                = p.PsrcComments
+      , ReportDescription           = p.ReportDescription
       , CreatedById                 = p.CreatedById
       , CreatedOn                   = p.CreatedOn
       , UpdatedById                 = p.UpdatedById
       , UpdatedOn                   = p.UpdatedOn
       , MostRecentTip               = mrt.TipLabel
+      , MostRecentTipId             = mrt.TipId
     FROM
         tip.Project AS p
     OUTER APPLY (
-        SELECT TOP 1
+        SELECT TOP (1)
             TipLabel = CONCAT(
                 RIGHT(CAST(t.BeginYear AS VARCHAR(4)), 2),
                 '-',
                 RIGHT(CAST(t.EndYear AS VARCHAR(4)), 2)
             )
+          , TipId = t.Id
         FROM tip.ProjectTipMapping AS ptm
         INNER JOIN tip.Tip AS t ON ptm.TipId = t.Id
         WHERE ptm.ProjectId = p.Id
@@ -205,6 +215,11 @@ BEGIN
       , ProjectAmendmentReviewStatusTypeId = pa.ProjectAmendmentReviewStatusTypeId
       , SponsorComments                    = pa.SponsorComments
       , PsrcComments                       = pa.PsrcComments
+      , ReportDescription                  = pa.ReportDescription
+      , ReportProjectTrackingFlag          = pa.ReportProjectTrackingFlag
+      , ReportNewProjectPhaseFlag          = pa.ReportNewProjectPhaseFlag
+      , ReportUpwpFlag                     = pa.ReportUpwpFlag
+      , ReportOtherAmendFlag               = pa.ReportOtherAmendFlag
       , ReviewUpdatedById                  = pa.ReviewUpdatedById
       , ReviewUpdateDate                   = pa.ReviewUpdateDate
       , CreatedById                        = pa.CreatedById
@@ -228,10 +243,13 @@ BEGIN
       , CreatedOn                 = pal.CreatedOn
       , UpdatedById               = pal.UpdatedById
       , UpdatedOn                 = pal.UpdatedOn
+      , CreatedByEmail            = ISNULL(u.Email, 'Unknown User')
     FROM
         tip.ProjectAmendmentLog AS pal
         INNER JOIN tip.ProjectAmendment AS pa
                 ON pa.Id = pal.ProjectAmendmentId
+        LEFT JOIN common.Users AS u
+                ON u.Id = pal.CreatedById
     WHERE
         pa.ProjectId = @ProjectId;
 
@@ -261,14 +279,26 @@ BEGIN
     -- =============================================
     -- SECTION 6: TIP Information
     -- =============================================
-    -- Get project tip records
+    -- Get project tip records with TIP details
     SELECT
-        Id        = project_tip_mapping.Id
-      , ProjectId = project_tip_mapping.ProjectId
-      , TipId     = project_tip_mapping.TipId
+        Id          = ptm.Id
+      , ProjectId   = ptm.ProjectId
+      , TipId       = ptm.TipId
+      , TipLabel    = CONCAT(
+            RIGHT(CAST(t.BeginYear AS VARCHAR(4)), 2),
+            '-',
+            RIGHT(CAST(t.EndYear AS VARCHAR(4)), 2)
+        )
+      , Description = t.Description
+      , BeginYear   = t.BeginYear
+      , EndYear     = t.EndYear
+      , IsCurrent   = t.IsCurrent
     FROM
-        tip.ProjectTipMapping AS project_tip_mapping
+        tip.ProjectTipMapping AS ptm
+        INNER JOIN tip.Tip AS t ON ptm.TipId = t.Id
     WHERE
-        project_tip_mapping.ProjectId = @ProjectId;
+        ptm.ProjectId = @ProjectId
+    ORDER BY
+        t.BeginYear DESC;
 END;
 GO

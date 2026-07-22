@@ -3,8 +3,8 @@ CREATE TABLE [common].[AgencyContactMapping]
 [Id] [uniqueidentifier] NOT NULL,
 [AgencyId] [uniqueidentifier] NOT NULL,
 [ContactId] [uniqueidentifier] NOT NULL,
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF__AgencyCon__Creat__744F2D60] DEFAULT (user_name()),
-[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF__AgencyCon__Creat__75435199] DEFAULT (getutcdate()),
+[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_AgencyContactMapping_CreatedById] DEFAULT (user_name()),
+[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_AgencyContactMapping_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
 [UpdatedOn] [datetime2] NULL
 ) ON [PRIMARY]

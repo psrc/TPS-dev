@@ -14,10 +14,10 @@ CREATE TABLE [tip].[AwardReference]
 [FundSourceTypeId] [uniqueidentifier] NULL,
 [FundAmount] [bigint] NULL,
 [Notes] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-[IsActive] [bit] NULL CONSTRAINT [DF__AwardRefe__IsAct__15B0212B] DEFAULT ((1)),
+[IsActive] [bit] NULL CONSTRAINT [DF_AwardReference_IsActive] DEFAULT ((1)),
 [ActionYear] [smallint] NULL,
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF__AwardRefe__Creat__16A44564] DEFAULT (user_name()),
-[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF__AwardRefe__Creat__1798699D] DEFAULT (getutcdate()),
+[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_AwardReference_CreatedById] DEFAULT (user_name()),
+[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_AwardReference_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
 [UpdatedOn] [datetime2] NULL
 ) ON [PRIMARY]

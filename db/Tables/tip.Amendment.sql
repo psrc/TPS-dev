@@ -9,11 +9,12 @@ CREATE TABLE [tip].[Amendment]
 [WsdotSubmittedDate] [date] NULL,
 [WsdotPostedDate] [date] NULL,
 [AmendmentMappedTypeId] [uniqueidentifier] NULL,
-[IsAdministrativeAmendmentFlag] [bit] NOT NULL CONSTRAINT [DF__Amendment__IsAdm__01A9287E] DEFAULT ((0)),
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF__Amendment__Creat__029D4CB7] DEFAULT (user_name()),
-[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF__Amendment__Creat__039170F0] DEFAULT (getutcdate()),
+[IsAdministrativeAmendmentFlag] [bit] NOT NULL CONSTRAINT [DF_Amendment_IsAdministrativeAmendmentFlag] DEFAULT ((0)),
+[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_Amendment_CreatedById] DEFAULT (user_name()),
+[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_Amendment_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
-[UpdatedOn] [datetime2] NULL
+[UpdatedOn] [datetime2] NULL,
+[EffectiveDate] [date] NULL
 ) ON [PRIMARY]
 GO
 ALTER TABLE [tip].[Amendment] ADD CONSTRAINT [PK_Amendment_Id] PRIMARY KEY CLUSTERED ([Id]) ON [PRIMARY]

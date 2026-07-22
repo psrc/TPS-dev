@@ -6,7 +6,7 @@ CREATE TABLE [common].[UserAuditLog]
 [TargetUserId] [nvarchar] (100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 [IpAddress] [nvarchar] (45) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 [UserAgent] [nvarchar] (500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-[Timestamp] [datetime2] NOT NULL CONSTRAINT [DF__UserAudit__Times__71C7C670] DEFAULT (getutcdate()),
+[Timestamp] [datetime2] NOT NULL CONSTRAINT [DF_UserAuditLog_Timestamp] DEFAULT (getutcdate()),
 [Metadata] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL
 ) ON [PRIMARY]
 GO

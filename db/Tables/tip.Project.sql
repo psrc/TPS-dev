@@ -32,12 +32,13 @@ CREATE TABLE [tip].[Project]
 [UpwpTasks] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 [UpwpProducts] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 [UpwpPolicy] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-[UpwpIsEquipmentPurchaseFlag] [bit] NULL CONSTRAINT [DF__Project__UpwpIsE__60132A89] DEFAULT ((0)),
+[UpwpIsEquipmentPurchaseFlag] [bit] NULL CONSTRAINT [DF_Project_UpwpIsEquipmentPurchaseFlag] DEFAULT ((0)),
 [PsrcComments] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF__Project__Created__61074EC2] DEFAULT (user_name()),
-[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF__Project__Created__61FB72FB] DEFAULT (getutcdate()),
+[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_Project_CreatedById] DEFAULT (user_name()),
+[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_Project_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
-[UpdatedOn] [datetime2] NULL
+[UpdatedOn] [datetime2] NULL,
+[ReportDescription] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL
 ) ON [PRIMARY]
 GO
 ALTER TABLE [tip].[Project] ADD CONSTRAINT [PK_tipProject_Id] PRIMARY KEY CLUSTERED ([Id]) ON [PRIMARY]

@@ -1,6 +1,6 @@
 SET QUOTED_IDENTIFIER ON
 GO
-SET ANSI_NULLS OFF
+SET ANSI_NULLS ON
 GO
 /*
 ==================================================
@@ -19,6 +19,7 @@ Modified:
     - 2025-07-29: Refactored to include Amendment information
     - 2025-08-08: Removed dynamic SQL and implemented CTE approach for single-column sorting with efficient pagination
     - 2025-12-12: Fixed case-sensitivity bug in sort column matching - use lowercase comparisons throughout
+    - 2026-03-05: Changed PendingAmendments from STRING_AGG to FOR JSON PATH to return structured amendment data with IDs
 
 Parameters:
     @UserId (UNIQUEIDENTIFIER) - User ID requesting the search (for audit/future authorization)
@@ -78,17 +79,17 @@ AS
         (
             RowNum              INT              NOT NULL
           , Id                  UNIQUEIDENTIFIER NOT NULL
-          , ProjectCode         NVARCHAR(20)     NOT NULL
+          , ProjectCode         NVARCHAR(50)     NOT NULL
           , AgencyName          NVARCHAR(255)    NOT NULL
           , Title               NVARCHAR(500)    NOT NULL
           , Description         NVARCHAR(MAX)    NULL
           , TotalCost           DECIMAL(19, 2)   NOT NULL
           , ContactId           UNIQUEIDENTIFIER NULL
-          , ContactFirstName    NVARCHAR(100)    NULL
-          , ContactLastName     NVARCHAR(100)    NULL
+          , ContactFirstName    NVARCHAR(255)    NULL
+          , ContactLastName     NVARCHAR(255)    NULL
           , ContactEmail        NVARCHAR(255)    NULL
-          , ContactPhone        NVARCHAR(20)     NULL
-          , ContactPhoneExt     NVARCHAR(10)     NULL
+          , ContactPhone        NVARCHAR(15)     NULL
+          , ContactPhoneExt     NVARCHAR(50)     NULL
           , LastPostedTip       NVARCHAR(255)    NULL
           , LastPostedAmendment NVARCHAR(255)    NULL
           , PendingAmendments   NVARCHAR(MAX)    NULL
@@ -138,7 +139,7 @@ AS
              , LastPostedTip       = tip_summary.LastPostedTip
              -- Amendment Information (most recent and pending)
              , LastPostedAmendment = last_posted_amendment.LastPostedAmendment
-             , PendingAmendments   = open_amendments.OpenAmendments
+             , PendingAmendments   = open_amendments.OpenAmendmentsJson
              -- Audit information
              , LastUpdatedBy       = ISNULL(user_profile.FullName, 'PSRC Staff')
              -- ROW_NUMBER for pagination with single-column sorting (using lowercase comparisons)
@@ -250,16 +251,19 @@ AS
                                    amendment.WsdotPostedDate DESC -- Gets the most recent posted Amendment
                            ) last_posted_amendment
                OUTER APPLY (
-                               SELECT OpenAmendments = STRING_AGG(amendment.Name, ', ')
-                               FROM
-                                   tip.ProjectAmendment         AS proj_amendment
-                                   JOIN tip.Amendment           AS amendment
-                                        ON amendment.Id         = proj_amendment.AmendmentId
-                                   JOIN tip.AmendmentStatusType AS amend_status_type
-                                        ON amend_status_type.Id = amendment.AmendmentStatusTypeId
-                               WHERE
-                                   proj_amendment.ProjectId = proj.Id
-                                   AND amend_status_type.Code NOT IN ('posted')
+                               SELECT OpenAmendmentsJson = (
+                                   SELECT amendment.Id AS amendmentId, amendment.Name AS name
+                                   FROM
+                                       tip.ProjectAmendment         AS proj_amendment
+                                       JOIN tip.Amendment           AS amendment
+                                            ON amendment.Id         = proj_amendment.AmendmentId
+                                       JOIN tip.AmendmentStatusType AS amend_status_type
+                                            ON amend_status_type.Id = amendment.AmendmentStatusTypeId
+                                   WHERE
+                                       proj_amendment.ProjectId = proj.Id
+                                       AND amend_status_type.Code NOT IN ('posted')
+                                   FOR JSON PATH
+                               )
                            ) open_amendments
            WHERE
                -- Text search filter - searches across multiple fields

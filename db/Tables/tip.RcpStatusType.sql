@@ -1,14 +1,14 @@
 CREATE TABLE [tip].[RcpStatusType]
 (
-[Id] [uniqueidentifier] NOT NULL CONSTRAINT [DF__RcpStatusTyp__Id__3F7150CD] DEFAULT (newid()),
+[Id] [uniqueidentifier] NOT NULL CONSTRAINT [DF_RcpStatusType_Id] DEFAULT (newid()),
 [Code] [nvarchar] (100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 [Description] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-[IsConstrained] [bit] NOT NULL CONSTRAINT [DF__RcpStatus__IsCon__40657506] DEFAULT ((0)),
+[IsConstrained] [bit] NOT NULL CONSTRAINT [DF_RcpStatusType_IsConstrained] DEFAULT ((0)),
 [EffectiveDate] [date] NULL,
 [EndDate] [date] NULL,
 [SortId] [int] NULL,
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF__RcpStatus__Creat__4159993F] DEFAULT (user_name()),
-[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF__RcpStatus__Creat__424DBD78] DEFAULT (getutcdate()),
+[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_RcpStatusType_CreatedById] DEFAULT (user_name()),
+[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_RcpStatusType_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
 [UpdatedOn] [datetime2] NULL
 ) ON [PRIMARY]

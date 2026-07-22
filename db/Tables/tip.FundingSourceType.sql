@@ -1,6 +1,6 @@
 CREATE TABLE [tip].[FundingSourceType]
 (
-[Id] [uniqueidentifier] NOT NULL CONSTRAINT [DF__FundingSourc__Id__446B1014] DEFAULT (newid()),
+[Id] [uniqueidentifier] NOT NULL CONSTRAINT [DF_FundingSourceType_Id] DEFAULT (newid()),
 [Code] [nvarchar] (100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 [Description] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 [GovernmentLevel] [nvarchar] (50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
@@ -12,8 +12,8 @@ CREATE TABLE [tip].[FundingSourceType]
 [SortId] [int] NULL,
 [EffectiveDate] [date] NULL,
 [EndDate] [date] NULL,
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF__FundingSo__Creat__455F344D] DEFAULT (user_name()),
-[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF__FundingSo__Creat__46535886] DEFAULT (getutcdate()),
+[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_FundingSourceType_CreatedById] DEFAULT (user_name()),
+[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_FundingSourceType_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
 [UpdatedOn] [datetime2] NULL
 ) ON [PRIMARY]

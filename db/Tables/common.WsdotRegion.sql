@@ -6,8 +6,8 @@ CREATE TABLE [common].[WsdotRegion]
 [SortId] [int] NULL,
 [EffectiveDate] [date] NULL,
 [EndDate] [date] NULL,
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF__WsdotRegi__Creat__69678A99] DEFAULT (user_name()),
-[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF__WsdotRegi__Creat__6A5BAED2] DEFAULT (getutcdate()),
+[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_WsdotRegion_CreatedById] DEFAULT (user_name()),
+[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_WsdotRegion_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
 [UpdatedOn] [datetime2] NULL
 ) ON [PRIMARY]

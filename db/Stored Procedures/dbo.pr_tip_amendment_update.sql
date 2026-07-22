@@ -13,7 +13,9 @@ Purpose: Updates an existing TIP (Transportation Improvement Program) amendment 
 Author: john.hunter@triskelle.solutions
 Created: 2025-07-24
 
-Modified: [Date] - [Modification details]
+Modified:
+    2026-02-19  Added guard to prevent setting status to "Posted" via direct update.
+                Posting must go through pr_tip_amendment_post for validation and data promotion.
 
 Parameters:
     @UserId (UNIQUEIDENTIFIER) - User ID performing the update (required for audit trail)
@@ -58,7 +60,7 @@ Example Usage:
         @IsAdministrativeAmendmentFlag = 0;
 ==================================================
 */
-CREATE   PROCEDURE [dbo].[pr_tip_amendment_update]
+CREATE    PROCEDURE [dbo].[pr_tip_amendment_update]
     @UserId                        UNIQUEIDENTIFIER      -- User performing the update (required)
   , @AmendmentId                   UNIQUEIDENTIFIER      -- Amendment to update (required)
   , @Name                          NVARCHAR(50)          -- Amendment name (required)
@@ -74,6 +76,16 @@ AS
     BEGIN
         -- Prevent extra result sets from interfering with the update
         SET NOCOUNT ON;
+
+        -- Prevent direct status change to "Posted" via update.
+        -- Posting must go through pr_tip_amendment_post for proper validation and data promotion.
+        DECLARE @PostedStatusId UNIQUEIDENTIFIER;
+        SELECT @PostedStatusId = Id FROM tip.AmendmentStatusType WHERE Code = 'posted';
+
+        IF @AmendmentStatusTypeId = @PostedStatusId
+        BEGIN
+            ;THROW 50001, 'Cannot set amendment status to Posted via update. Use the Post Amendment function instead.', 1;
+        END
 
         -- Update the amendment record with all provided values
         -- NULL parameters will update the corresponding fields to NULL

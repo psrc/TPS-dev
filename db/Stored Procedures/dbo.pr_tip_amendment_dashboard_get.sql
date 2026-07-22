@@ -8,6 +8,8 @@ GO
 -- =============================================
 -- Author:        john.hunter@triskelle.solutions
 -- Create date:   2025-07-23
+-- Modified:      2026-05-11 - Exclude voided amendments from all dashboard filter views
+-- Modified:      2026-05-13 - Drop 'voided' filter (amendments are now hard-deleted instead of voided)
 -- Description:   Retrieves TIP amendment dashboard data with project count aggregations
 -- =============================================
 -- Business Context:
@@ -65,23 +67,24 @@ AS
                LEFT JOIN tip.ProjectAmendmentReviewStatusType AS proj_amend_review_status_type
                          ON proj_amend_review_status_type.Id = proj_amendment.ProjectAmendmentReviewStatusTypeId
            WHERE
-               -- Apply filter conditions directly without variable lookups
-               (
-                   @Filter                                        = 'open'
-                   AND amendment.IsAdministrativeAmendmentFlag    = 0
-                   AND (
-                           amend_status_type.Code                 <> 'posted'
-                           OR amend_mapped_type.Code              = 'not-yet-mapped'
-                       )
+                   -- Apply filter conditions directly without variable lookups
+                   (
+                       @Filter                                        = 'open'
+                       AND amendment.IsAdministrativeAmendmentFlag    = 0
+                       AND (
+                               amend_status_type.Code                 <> 'posted'
+                               OR amend_mapped_type.Code              = 'not-yet-mapped'
+                           )
+                   )
+                   OR (
+                          @Filter                                     = 'open-and-closed'
+                          AND amendment.IsAdministrativeAmendmentFlag = 0
+                      )
+                   OR (
+                          @Filter                                     = 'administrative'
+                          AND amendment.IsAdministrativeAmendmentFlag = 1
+                      )
                )
-               OR (
-                      @Filter                                     = 'open-and-closed'
-                      AND amendment.IsAdministrativeAmendmentFlag = 0
-                  )
-               OR (
-                      @Filter                                     = 'administrative'
-                      AND amendment.IsAdministrativeAmendmentFlag = 1
-                  ))
         -- Result Set 1: Distinct amendments with their metrics
         SELECT DISTINCT
                Id                    = AmendmentCTE.Id

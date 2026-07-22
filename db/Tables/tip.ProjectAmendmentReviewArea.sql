@@ -6,8 +6,8 @@ CREATE TABLE [tip].[ProjectAmendmentReviewArea]
 [ProjectAmendmentReviewAreaStatusTypeId] [uniqueidentifier] NOT NULL,
 [ReviewerComments] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 [FollowUpComments] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF__ProjectAm__Creat__7231DAC4] DEFAULT (user_name()),
-[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF__ProjectAm__Creat__7325FEFD] DEFAULT (getutcdate()),
+[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_ProjectAmendmentReviewArea_CreatedById] DEFAULT (user_name()),
+[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_ProjectAmendmentReviewArea_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
 [UpdatedOn] [datetime2] NULL
 ) ON [PRIMARY]

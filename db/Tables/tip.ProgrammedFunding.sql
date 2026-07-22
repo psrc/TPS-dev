@@ -14,9 +14,9 @@ CREATE TABLE [tip].[ProgrammedFunding]
 [FhwaObligatedDate] [date] NULL,
 [FhwaObligatedNumber] [nvarchar] (50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 [OriginRecordId] [uniqueidentifier] NOT NULL,
-[IsActive] [bit] NOT NULL CONSTRAINT [DF__Programme__IsAct__577DE488] DEFAULT ((1)),
+[IsActive] [bit] NOT NULL CONSTRAINT [DF_ProgrammedFunding_IsActive] DEFAULT ((1)),
 [CreatedById] [uniqueidentifier] NOT NULL,
-[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF__Programme__Creat__587208C1] DEFAULT (getutcdate()),
+[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_ProgrammedFunding_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
 [UpdatedOn] [datetime2] NULL
 ) ON [PRIMARY]

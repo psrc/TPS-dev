@@ -33,21 +33,20 @@ CREATE TABLE [tip].[Project_Pending]
 [UpwpTasks] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 [UpwpProducts] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 [UpwpPolicy] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-[UpwpIsEquipmentPurchaseFlag] [bit] NULL CONSTRAINT [DF__Project_P__UpwpI__3AAC9BB0] DEFAULT ((0)),
+[UpwpIsEquipmentPurchaseFlag] [bit] NULL CONSTRAINT [DF_Project_Pending_UpwpIsEquipmentPurchaseFlag] DEFAULT ((0)),
 [PsrcComments] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF__Project_P__Creat__3BA0BFE9] DEFAULT (user_name()),
-[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF__Project_P__Creat__3C94E422] DEFAULT (getutcdate()),
+[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_Project_Pending_CreatedById] DEFAULT (user_name()),
+[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_Project_Pending_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
-[UpdatedOn] [datetime2] NULL
+[UpdatedOn] [datetime2] NULL,
+[ReportDescription] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL
 ) ON [PRIMARY]
 GO
 ALTER TABLE [tip].[Project_Pending] ADD CONSTRAINT [PK_Project_Pending] PRIMARY KEY CLUSTERED ([Id]) ON [PRIMARY]
 GO
 CREATE UNIQUE NONCLUSTERED INDEX [IX_Project_Pending_Id] ON [tip].[Project_Pending] ([Id]) ON [PRIMARY]
 GO
-CREATE UNIQUE NONCLUSTERED INDEX [IX_Project_Pending_TipIdCode] ON [tip].[Project_Pending] ([ProjectCode]) ON [PRIMARY]
-GO
-ALTER TABLE [tip].[Project_Pending] ADD CONSTRAINT [PK_Project_Pending_TipIdCode] UNIQUE NONCLUSTERED ([ProjectCode]) ON [PRIMARY]
+ALTER TABLE [tip].[Project_Pending] ADD CONSTRAINT [PK_Project_Pending_TipIdCode] UNIQUE NONCLUSTERED ([ProjectCode], [ProjectAmendmentId]) ON [PRIMARY]
 GO
 ALTER TABLE [tip].[Project_Pending] ADD CONSTRAINT [FK_Project_Pending_Agency_AgencyId] FOREIGN KEY ([AgencyId]) REFERENCES [common].[Agency] ([Id])
 GO

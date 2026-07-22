@@ -3,8 +3,8 @@ CREATE TABLE [tip].[ProjectRcpProjectMapping]
 [Id] [uniqueidentifier] NOT NULL,
 [TipProjectId] [uniqueidentifier] NOT NULL,
 [RcpProjectId] [uniqueidentifier] NOT NULL,
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF__ProjectRc__Creat__31233176] DEFAULT (user_name()),
-[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF__ProjectRc__Creat__321755AF] DEFAULT (getutcdate()),
+[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_ProjectRcpProjectMapping_CreatedById] DEFAULT (user_name()),
+[CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_ProjectRcpProjectMapping_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
 [UpdatedOn] [datetime2] NULL
 ) ON [PRIMARY]
