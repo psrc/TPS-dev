@@ -29,10 +29,13 @@ Business Rules:
     - Used for CSV export functionality
 ==================================================
 */
+-- Modified:    2026-09-12 - PSRC-mte.1 tenancy scoping (@TenantAgencyId/@BypassTenancy)
 CREATE PROCEDURE [dbo].[pr_project_tip_mapping_export]
 (
     @UserId UNIQUEIDENTIFIER -- User making the request
   , @TipId  UNIQUEIDENTIFIER -- TIP to export projects for
+  , @TenantAgencyId UNIQUEIDENTIFIER = NULL -- PSRC-mte.1: caller's agency (NULL = none)
+  , @BypassTenancy  BIT              = 0    -- PSRC-mte.1: 1 = internal caller, no scoping
 )
 AS
 BEGIN
@@ -57,7 +60,10 @@ BEGIN
                   ON status.Id             = proj.CompletionStatusTypeId
     WHERE
         mapping.TipId = @TipId
+        AND (@BypassTenancy = 1 OR proj.AgencyId = @TenantAgencyId) -- PSRC-mte.1
     ORDER BY
         proj.ProjectCode ASC;
 END;
+
+
 GO

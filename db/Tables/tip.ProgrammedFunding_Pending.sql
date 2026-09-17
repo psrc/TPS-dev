@@ -18,7 +18,9 @@ CREATE TABLE [tip].[ProgrammedFunding_Pending]
 [CreatedById] [uniqueidentifier] NOT NULL,
 [CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_ProgrammedFunding_Pending_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
-[UpdatedOn] [datetime2] NULL
+[UpdatedOn] [datetime2] NULL,
+[IsAmendmentAddition] [bit] NOT NULL CONSTRAINT [DF_ProgrammedFunding_Pending_IsAmendmentAddition] DEFAULT ((0)),
+[LineageId] [uniqueidentifier] NULL
 ) ON [PRIMARY]
 GO
 ALTER TABLE [tip].[ProgrammedFunding_Pending] ADD CONSTRAINT [PK_ProgrammedFunding_Pending] PRIMARY KEY CLUSTERED ([Id]) ON [PRIMARY]

@@ -31,15 +31,22 @@ Business Rules:
     - Log entries reference ProjectId and TipId directly since mapping will be deleted
 ==================================================
 */
+-- Modified:    2026-09-12 - PSRC-mte.1 tenancy scoping (@TenantAgencyId/@BypassTenancy)
 CREATE PROCEDURE [dbo].[pr_project_tip_mapping_remove]
 (
     @UserId     UNIQUEIDENTIFIER                   -- User performing the operation
   , @TipId      UNIQUEIDENTIFIER                   -- TIP to remove projects from
   , @ProjectIds UniqueIdentifierArrayType READONLY -- Projects to remove
+  , @TenantAgencyId UNIQUEIDENTIFIER = NULL -- PSRC-mte.1: caller's agency (NULL = none)
+  , @BypassTenancy  BIT              = 0    -- PSRC-mte.1: 1 = internal caller, no scoping
 )
 AS
 BEGIN
     SET NOCOUNT ON;
+    -- PSRC-mte.1: internal-only. This object has no owning agency, so a scoped caller has no
+    -- rows here at all; refusing beats guessing.
+    IF @BypassTenancy = 0
+        THROW 50403, 'Tenancy: pr_project_tip_mapping_remove is internal-only.', 1;
 
     DECLARE @RemovedCount INT = 0;
     DECLARE @LogTypeId UNIQUEIDENTIFIER;
@@ -105,4 +112,6 @@ BEGIN
     -- Return count of projects removed
     SELECT RemovedCount = @RemovedCount;
 END;
+
+
 GO

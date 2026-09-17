@@ -11,8 +11,13 @@ GO
 -- Purpose:     This procedure creates a new entry in the tip.Amendment table with various
 --              administrative and timeline details. It generates a new GUID for the record
 --              and returns it to the caller.
+--
+-- Modified:    2026-09-09 - PSRC-kikm - added @TipId. Falls back to the current TIP when the
+--                           caller does not supply one, so an amendment can never be created
+--                           without a TIP and the backfill cannot erode.
+-- Modified:    2026-09-12 - PSRC-mte.1 tenancy scoping (@TenantAgencyId/@BypassTenancy)
 -- =============================================
-CREATE   PROCEDURE [dbo].[pr_tip_amendment_create]
+CREATE PROCEDURE [dbo].[pr_tip_amendment_create]
     @UserId                        UNIQUEIDENTIFIER        -- ID of the user creating the amendment
   , @Name                          NVARCHAR(50)            -- Name/description of the amendment
   , @AmendmentStatusTypeId         UNIQUEIDENTIFIER = NULL -- Current status of the amendment (optional)
@@ -23,13 +28,29 @@ CREATE   PROCEDURE [dbo].[pr_tip_amendment_create]
   , @WsdotSubmittedDate            DATE             = NULL -- Date submitted to WSDOT (optional)
   , @WsdotPostedDate               DATE             = NULL -- Date posted by WSDOT (optional)
   , @IsAdministrativeAmendmentFlag BIT                     -- Flag indicating if this is an administrative amendment
+  , @TipId                         UNIQUEIDENTIFIER = NULL -- TIP this amendment belongs to; defaults to the current TIP
+  , @TenantAgencyId UNIQUEIDENTIFIER = NULL -- PSRC-mte.1: caller's agency (NULL = none)
+  , @BypassTenancy  BIT              = 0    -- PSRC-mte.1: 1 = internal caller, no scoping
 AS
     BEGIN
         -- Prevent the count of affected rows from being returned
         SET NOCOUNT ON;
+        -- PSRC-mte.1: internal-only. This object has no owning agency, so a scoped caller has no
+        -- rows here at all; refusing beats guessing.
+        IF @BypassTenancy = 0
+            THROW 50403, 'Tenancy: pr_tip_amendment_create is internal-only.', 1;
 
         -- Generate a new unique identifier for this amendment record
         DECLARE @Id UNIQUEIDENTIFIER = NEWID();
+
+        -- A new amendment amends the TIP in effect unless the caller says otherwise. Resolving it
+        -- here rather than only in the client means no caller can leave TipId null by omission.
+        IF @TipId IS NULL
+            BEGIN
+                SELECT TOP (1) @TipId = tip.Id
+                FROM tip.Tip AS tip
+                WHERE tip.IsCurrent = 1;
+            END;
 
         -- Insert the new amendment record with all provided details
         INSERT tip.Amendment
@@ -43,6 +64,7 @@ AS
            , WsdotPostedDate
            , AmendmentMappedTypeId
            , IsAdministrativeAmendmentFlag
+           , TipId
            , CreatedById
            , CreatedOn)
         VALUES
@@ -56,6 +78,7 @@ AS
            , @WsdotPostedDate
            , @AmendmentMappedTypeId
            , @IsAdministrativeAmendmentFlag
+           , @TipId
            , @UserId      -- Track who created this record
            , GETUTCDATE() -- Track when this record was created (UTC time)
             );
@@ -63,4 +86,6 @@ AS
         -- Return the newly generated ID to the caller
         SELECT @Id;
     END;
+
+
 GO

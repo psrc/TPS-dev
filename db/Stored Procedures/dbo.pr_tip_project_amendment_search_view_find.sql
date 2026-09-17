@@ -1,6 +1,6 @@
 SET QUOTED_IDENTIFIER ON
 GO
-SET ANSI_NULLS OFF
+SET ANSI_NULLS ON
 GO
 /*
 ==================================================
@@ -17,6 +17,12 @@ Modified:
     - 2025-12-12: Fixed case-sensitivity bug in sort column matching - use lowercase comparisons
     - 2025-12-22: Query from pending tables instead of original Project table to show
                   amendment-specific data and return correct Project_Pending.Id
+    - 2026-09-07: PSRC-r2j5 - LastPostedTip picked the alphabetically greatest TIP
+                  description, not the latest one. MAX() over text ranked '98-2000'
+                  above '21-24' because '9' > '2', so 30 projects on DEV displayed a
+                  1998-era TIP as their last posted TIP. Replaced the two TIP joins
+                  with an OUTER APPLY that orders by EndYear, which also stops a
+                  pending TIP from displacing the current one once PSRC-r2j5 ships.
 
 Parameters:
     @UserId (UNIQUEIDENTIFIER) - User ID requesting the search (for audit/future authorization)
@@ -52,6 +58,7 @@ Dependencies:
     - User-defined types: SortByArrayType, UniqueIdentifierArrayType
 ==================================================
 */
+-- Modified:    2026-09-12 - PSRC-mte.1 tenancy scoping (@TenantAgencyId/@BypassTenancy)
 CREATE PROCEDURE [dbo].[pr_tip_project_amendment_search_view_find]
 (
     @UserId                       UNIQUEIDENTIFIER,                   -- User making the request
@@ -63,7 +70,9 @@ CREATE PROCEDURE [dbo].[pr_tip_project_amendment_search_view_find]
     @AmendmentMappedTypeIds       UniqueIdentifierArrayType READONLY, -- Amendment type filters
     @RcpStatusTypeIds             UniqueIdentifierArrayType READONLY, -- RCP status filters
     @AmendmentReviewStatusTypeIds UniqueIdentifierArrayType READONLY, -- Review status filters
-    @AmendmentSectionTypeIds      UniqueIdentifierArrayType READONLY  -- Section type filters
+    @AmendmentSectionTypeIds      UniqueIdentifierArrayType READONLY, -- Section type filters
+    @TenantAgencyId               UNIQUEIDENTIFIER = NULL,            -- PSRC-mte.1: caller's agency (NULL = none)
+    @BypassTenancy                BIT = 0                             -- PSRC-mte.1: 1 = internal caller, no scoping
 )
 AS
 BEGIN
@@ -154,8 +163,9 @@ BEGIN
             contact.Phone AS ContactPhone,
             contact.PhoneExt AS ContactPhoneExt,
 
-            -- Latest TIP information (from original project via ProjectAmendment.ProjectId)
-            LastPostedTip = MAX(tip.Description),
+            -- Latest TIP information (from original project via ProjectAmendment.ProjectId).
+            -- MAX() over a single-row APPLY is a no-op; it is present only to satisfy GROUP BY.
+            LastPostedTip = MAX(last_posted_tip.Description),
 
             -- Audit information from pending project
             LastUpdatedBy = ISNULL(user_profile.FullName, ''''),
@@ -174,13 +184,23 @@ BEGIN
         LEFT JOIN tip.ProgrammedFunding_Pending prog_funding
             ON prog_funding.Project_PendingId = proj_pending.Id
                AND prog_funding.IsActive = 1
-        LEFT JOIN tip.ProjectTipMapping proj_tip_map
-            ON proj_tip_map.ProjectId = proj_amend.ProjectId
-        LEFT JOIN tip.Tip tip
-            ON tip.Id = proj_tip_map.TipId
+        OUTER APPLY (
+            -- A project carries forward into successive TIPs, so it holds several mappings.
+            -- The one that matters here is the most recent by year, not by description text.
+            SELECT TOP 1
+                Description = t.Description
+            FROM tip.ProjectTipMapping AS ptm
+                INNER JOIN tip.Tip AS t
+                    ON t.Id = ptm.TipId
+            WHERE ptm.ProjectId = proj_amend.ProjectId
+            ORDER BY t.EndYear DESC
+                    ,t.BeginYear DESC
+                    ,t.Description DESC
+        ) AS last_posted_tip
         WHERE
             -- Primary filter - must be for requested amendment
             proj_amend.AmendmentId = @AmendmentId
+            AND (@BypassTenancy = 1 OR proj_pending.AgencyId = @TenantAgencyId)
             AND
             -- Text search filter - searches across multiple fields
             (ISNULL(@Search, '''') = '''' OR
@@ -252,6 +272,7 @@ BEGIN
     WHERE
         -- Same filter criteria as main query
         proj_amend.AmendmentId = @AmendmentId
+            AND (@BypassTenancy = 1 OR proj_pending.AgencyId = @TenantAgencyId)
         AND
         -- Text search filter
         (ISNULL(@Search, '''') = '''' OR
@@ -284,7 +305,9 @@ BEGIN
                        @AmendmentMappedTypeIds UniqueIdentifierArrayType READONLY,
                        @RcpStatusTypeIds UniqueIdentifierArrayType READONLY,
                        @AmendmentReviewStatusTypeIds UniqueIdentifierArrayType READONLY,
-                       @AmendmentSectionTypeIds UniqueIdentifierArrayType READONLY';
+                       @AmendmentSectionTypeIds UniqueIdentifierArrayType READONLY,
+                       @TenantAgencyId UNIQUEIDENTIFIER,
+                       @BypassTenancy BIT';
     
     -- Execute the main query for paginated results
     EXEC sp_executesql @SQL = @SQL, 
@@ -296,7 +319,9 @@ BEGIN
                        @AmendmentMappedTypeIds = @AmendmentMappedTypeIds,
                        @RcpStatusTypeIds = @RcpStatusTypeIds,
                        @AmendmentReviewStatusTypeIds = @AmendmentReviewStatusTypeIds,
-                       @AmendmentSectionTypeIds = @AmendmentSectionTypeIds;
+                       @AmendmentSectionTypeIds = @AmendmentSectionTypeIds,
+                       @TenantAgencyId = @TenantAgencyId,
+                       @BypassTenancy = @BypassTenancy;
 
     -- Execute the count query for total matching records
     EXEC sp_executesql @CountSQL = @CountSQL, 
@@ -308,6 +333,10 @@ BEGIN
                        @AmendmentMappedTypeIds = @AmendmentMappedTypeIds,
                        @RcpStatusTypeIds = @RcpStatusTypeIds,
                        @AmendmentReviewStatusTypeIds = @AmendmentReviewStatusTypeIds,
-                       @AmendmentSectionTypeIds = @AmendmentSectionTypeIds;
+                       @AmendmentSectionTypeIds = @AmendmentSectionTypeIds,
+                       @TenantAgencyId = @TenantAgencyId,
+                       @BypassTenancy = @BypassTenancy;
 END;
+
+
 GO

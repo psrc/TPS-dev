@@ -1,6 +1,6 @@
 SET QUOTED_IDENTIFIER ON
 GO
-SET ANSI_NULLS OFF
+SET ANSI_NULLS ON
 GO
 /*
 ==================================================
@@ -52,6 +52,7 @@ Dependencies:
     - User-defined types: SortByArrayType, UniqueIdentifierArrayType
 ==================================================
 */
+-- Modified:    2026-09-12 - PSRC-mte.1 tenancy scoping (@TenantAgencyId/@BypassTenancy)
 CREATE PROCEDURE [dbo].[pr_tip_project_amendment_summary_view_find]
 (
     @UserId                       UNIQUEIDENTIFIER,                   -- User making the request
@@ -64,7 +65,9 @@ CREATE PROCEDURE [dbo].[pr_tip_project_amendment_summary_view_find]
     @RcpStatusTypeIds             UniqueIdentifierArrayType READONLY, -- RCP status filters
     @AmendmentReviewStatusTypeIds UniqueIdentifierArrayType READONLY, -- Review status filters
     @AmendmentSectionTypeIds      UniqueIdentifierArrayType READONLY, -- Section type filters
-    @AmendmentReviewAreaTypeIds   UniqueIdentifierArrayType READONLY  -- Unresolved issue types filter
+    @AmendmentReviewAreaTypeIds   UniqueIdentifierArrayType READONLY, -- Unresolved issue types filter
+    @TenantAgencyId               UNIQUEIDENTIFIER = NULL,            -- PSRC-mte.1: caller's agency (NULL = none)
+    @BypassTenancy                BIT = 0                             -- PSRC-mte.1: 1 = internal caller, no scoping
 )
 AS
 BEGIN
@@ -162,6 +165,7 @@ BEGIN
         WHERE
             -- Primary filter - must be for requested amendment
             proj_amend.AmendmentId = @AmendmentId
+            AND (@BypassTenancy = 1 OR proj_pending.AgencyId = @TenantAgencyId)
             AND
             -- Text search filter - searches across multiple fields
             (ISNULL(@Search, '''') = '''' OR
@@ -217,12 +221,15 @@ BEGIN
     FROM tip.Project proj
     INNER JOIN tip.ProjectAmendment proj_amend
         ON proj_amend.ProjectId = proj.Id
+    INNER JOIN tip.Project_Pending proj_pending
+        ON proj_pending.ProjectAmendmentId = proj_amend.Id
     LEFT JOIN common.Agency agency
         ON agency.Id = proj.AgencyId
     LEFT JOIN common.Contact contact
         ON contact.Id = proj.ContactId
     WHERE
         proj_amend.AmendmentId = @AmendmentId
+        AND (@BypassTenancy = 1 OR proj_pending.AgencyId = @TenantAgencyId)
         AND
         (ISNULL(@Search, '''') = '''' OR
          proj.Title LIKE ''%'' + @Search + ''%'' OR
@@ -263,7 +270,9 @@ BEGIN
                        @RcpStatusTypeIds UniqueIdentifierArrayType READONLY,
                        @AmendmentReviewStatusTypeIds UniqueIdentifierArrayType READONLY,
                        @AmendmentSectionTypeIds UniqueIdentifierArrayType READONLY,
-                       @AmendmentReviewAreaTypeIds UniqueIdentifierArrayType READONLY';
+                       @AmendmentReviewAreaTypeIds UniqueIdentifierArrayType READONLY,
+                       @TenantAgencyId UNIQUEIDENTIFIER,
+                       @BypassTenancy BIT';
 
     -- Execute the main query for paginated project results (Result Set 1)
     EXEC sp_executesql @SQL = @SQL,
@@ -277,7 +286,9 @@ BEGIN
                        @RcpStatusTypeIds = @RcpStatusTypeIds,
                        @AmendmentReviewStatusTypeIds = @AmendmentReviewStatusTypeIds,
                        @AmendmentSectionTypeIds = @AmendmentSectionTypeIds,
-                       @AmendmentReviewAreaTypeIds = @AmendmentReviewAreaTypeIds;
+                       @AmendmentReviewAreaTypeIds = @AmendmentReviewAreaTypeIds,
+                       @TenantAgencyId = @TenantAgencyId,
+                       @BypassTenancy = @BypassTenancy;
 
     -- Execute the count query for total matching records (Result Set 2)
     EXEC sp_executesql @CountSQL = @CountSQL,
@@ -291,7 +302,9 @@ BEGIN
                        @RcpStatusTypeIds = @RcpStatusTypeIds,
                        @AmendmentReviewStatusTypeIds = @AmendmentReviewStatusTypeIds,
                        @AmendmentSectionTypeIds = @AmendmentSectionTypeIds,
-                       @AmendmentReviewAreaTypeIds = @AmendmentReviewAreaTypeIds;
+                       @AmendmentReviewAreaTypeIds = @AmendmentReviewAreaTypeIds,
+                       @TenantAgencyId = @TenantAgencyId,
+                       @BypassTenancy = @BypassTenancy;
 
     -- =============================================
     -- SECTION 4: RETURN REVIEW AREA TYPE METADATA (Result Set 3)
@@ -328,9 +341,13 @@ BEGIN
     INNER JOIN tip.ProjectAmendmentReviewAreaStatusType parast
         ON parast.Id = para.ProjectAmendmentReviewAreaStatusTypeId
     WHERE pa.AmendmentId = @AmendmentId
+      AND (@BypassTenancy = 1 OR EXISTS (SELECT 1 FROM tip.Project_Pending pp
+                                         WHERE pp.ProjectAmendmentId = pa.Id AND pp.AgencyId = @TenantAgencyId))
       -- Only include statuses for "current" review area types
       AND parat.EffectiveDate <= @ComparatorDate
       AND (parat.EndDate IS NULL OR parat.EndDate >= @ComparatorDate)
     ORDER BY para.ProjectAmendmentId, parat.SortId ASC;
 END;
+
+
 GO

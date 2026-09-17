@@ -4,6 +4,7 @@ SET ANSI_NULLS ON
 GO
 -- =============================================
 -- Author:      john.hunter@triskelle.solutions
+-- Modified:    2026-09-12 - PSRC-mte.1 tenancy scoping (@TenantAgencyId/@BypassTenancy)
 -- Create date: 2026-02-19
 -- Description: Moves a project from one amendment to another by updating the
 --              AmendmentId (and optionally AmendmentSectionTypeId) on the
@@ -32,14 +33,20 @@ GO
 CREATE PROCEDURE [dbo].[pr_tip_project_amendment_move]
 (
     @UserId                UNIQUEIDENTIFIER
-  , @SourceAmendmentId     UNIQUEIDENTIFIER
-  , @ProjectPendingId      UNIQUEIDENTIFIER
-  , @TargetAmendmentId     UNIQUEIDENTIFIER
-  , @AmendmentSectionTypeId UNIQUEIDENTIFIER
+, @SourceAmendmentId     UNIQUEIDENTIFIER
+, @ProjectPendingId      UNIQUEIDENTIFIER
+, @TargetAmendmentId     UNIQUEIDENTIFIER
+, @AmendmentSectionTypeId UNIQUEIDENTIFIER
+, @TenantAgencyId UNIQUEIDENTIFIER = NULL -- PSRC-mte.1: caller's agency (NULL = none)
+, @BypassTenancy  BIT              = 0    -- PSRC-mte.1: 1 = internal caller, no scoping
 )
 AS
 BEGIN
     SET NOCOUNT ON;
+
+    -- PSRC-mte.1: a scoped caller may only touch a pending project in their own agency.
+    IF @BypassTenancy = 0 AND NOT EXISTS (SELECT 1 FROM tip.Project_Pending WHERE Id = @ProjectPendingId AND AgencyId = @TenantAgencyId)
+        THROW 50403, 'Tenancy: pending project is not in the caller''s agency.', 1;
 
     DECLARE @ProjectAmendmentId UNIQUEIDENTIFIER;
     DECLARE @ProjectId UNIQUEIDENTIFIER;
@@ -48,55 +55,55 @@ BEGIN
     -- Get the ProjectAmendment ID and ProjectId from Project_Pending
     SELECT @ProjectAmendmentId = pp.ProjectAmendmentId,
            @ProjectId = pa.ProjectId
-    FROM tip.Project_Pending AS pp
-    INNER JOIN tip.ProjectAmendment AS pa ON pa.Id = pp.ProjectAmendmentId
-    WHERE pp.Id = @ProjectPendingId
-      AND pa.AmendmentId = @SourceAmendmentId;
+        FROM tip.Project_Pending AS pp
+        INNER JOIN tip.ProjectAmendment AS pa ON pa.Id = pp.ProjectAmendmentId
+        WHERE pp.Id = @ProjectPendingId
+          AND pa.AmendmentId = @SourceAmendmentId;
 
     -- If no Project_Pending found, return 0
     IF @ProjectAmendmentId IS NULL
-    BEGIN
-        SELECT Success = 0, Message = 'Project amendment not found in source amendment';
-        RETURN 0;
-    END;
+        BEGIN
+            SELECT Success = 0, Message = 'Project amendment not found in source amendment';
+            RETURN 0;
+        END;
 
     -- Validate source amendment is not posted
     IF EXISTS (
         SELECT 1 FROM tip.Amendment a
         INNER JOIN tip.AmendmentStatusType ast ON ast.Id = a.AmendmentStatusTypeId
-        WHERE a.Id = @SourceAmendmentId AND ast.Code = 'posted'
+                 WHERE a.Id = @SourceAmendmentId AND ast.Code = 'posted'
     )
-    BEGIN
-        SELECT Success = 0, Message = 'Cannot move project from a posted amendment';
-        RETURN 0;
-    END;
+        BEGIN
+            SELECT Success = 0, Message = 'Cannot move project from a posted amendment';
+            RETURN 0;
+        END;
 
     -- Validate target amendment exists and is not posted
     IF NOT EXISTS (SELECT 1 FROM tip.Amendment WHERE Id = @TargetAmendmentId)
-    BEGIN
-        SELECT Success = 0, Message = 'Target amendment does not exist';
-        RETURN 0;
-    END;
+        BEGIN
+            SELECT Success = 0, Message = 'Target amendment does not exist';
+            RETURN 0;
+        END;
 
     IF EXISTS (
         SELECT 1 FROM tip.Amendment a
         INNER JOIN tip.AmendmentStatusType ast ON ast.Id = a.AmendmentStatusTypeId
-        WHERE a.Id = @TargetAmendmentId AND ast.Code = 'posted'
+                 WHERE a.Id = @TargetAmendmentId AND ast.Code = 'posted'
     )
-    BEGIN
-        SELECT Success = 0, Message = 'Cannot move project to a posted amendment';
-        RETURN 0;
-    END;
+        BEGIN
+            SELECT Success = 0, Message = 'Cannot move project to a posted amendment';
+            RETURN 0;
+        END;
 
     -- Validate project is not already in the target amendment
     IF EXISTS (
         SELECT 1 FROM tip.ProjectAmendment
-        WHERE ProjectId = @ProjectId AND AmendmentId = @TargetAmendmentId
+                 WHERE ProjectId = @ProjectId AND AmendmentId = @TargetAmendmentId
     )
-    BEGIN
-        SELECT Success = 0, Message = 'Project already exists in the target amendment';
-        RETURN 0;
-    END;
+        BEGIN
+            SELECT Success = 0, Message = 'Project already exists in the target amendment';
+            RETURN 0;
+        END;
 
     BEGIN TRY
         BEGIN TRANSACTION;
@@ -107,7 +114,7 @@ BEGIN
             AmendmentSectionTypeId = @AmendmentSectionTypeId,
             UpdatedById = @UserId,
             UpdatedOn = GETUTCDATE()
-        WHERE Id = @ProjectAmendmentId;
+            WHERE Id = @ProjectAmendmentId;
 
         SET @UpdatedCount = @@ROWCOUNT;
 
@@ -124,4 +131,6 @@ BEGIN
         Success = IIF(@UpdatedCount > 0, 1, 0)
       , Message = IIF(@UpdatedCount > 0, 'Project moved to target amendment successfully', 'No records updated');
 END;
+
+
 GO

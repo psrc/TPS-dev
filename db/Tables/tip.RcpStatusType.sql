@@ -7,7 +7,7 @@ CREATE TABLE [tip].[RcpStatusType]
 [EffectiveDate] [date] NULL,
 [EndDate] [date] NULL,
 [SortId] [int] NULL,
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_RcpStatusType_CreatedById] DEFAULT (user_name()),
+[CreatedById] [uniqueidentifier] NOT NULL,
 [CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_RcpStatusType_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
 [UpdatedOn] [datetime2] NULL

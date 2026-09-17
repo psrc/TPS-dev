@@ -2,7 +2,6 @@ SET QUOTED_IDENTIFIER ON
 GO
 SET ANSI_NULLS ON
 GO
-
 /*
 ==================================================
 Stored Procedure: dbo.pr_contact_get_by_agency_id
@@ -37,15 +36,20 @@ Business Rules:
     - No security filtering applied - assumes authorization handled at application layer
 ==================================================
 */
-
+-- Modified:    2026-09-12 - PSRC-mte.1 tenancy scoping (@TenantAgencyId/@BypassTenancy)
 CREATE PROCEDURE [dbo].[pr_contact_get_by_agency_id]
 (
     @UserId   UNIQUEIDENTIFIER -- User requesting contact information
   , @AgencyId UNIQUEIDENTIFIER -- Agency ID to retrieve contacts for
+  , @TenantAgencyId UNIQUEIDENTIFIER = NULL -- PSRC-mte.1: caller's agency (NULL = none)
+  , @BypassTenancy  BIT              = 0    -- PSRC-mte.1: 1 = internal caller, no scoping
 )
 AS
     BEGIN
         SET NOCOUNT ON;
+        -- PSRC-mte.1: a scoped caller may only name their own agency.
+        IF @BypassTenancy = 0 AND (@TenantAgencyId IS NULL OR @AgencyId IS NULL OR @AgencyId <> @TenantAgencyId)
+            THROW 50403, 'Tenancy: agency is not the caller''s agency.', 1;
         -- Prevent extra result sets from interfering with SELECT statements
 
         -- Retrieve all contacts associated with the specified agency
@@ -70,4 +74,6 @@ AS
 		ORDER BY
 			FirstName, LastName;
     END;
+
+
 GO

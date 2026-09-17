@@ -8,7 +8,8 @@ CREATE TABLE [common].[Roles]
 [CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_Roles_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedOn] [datetime2] NULL,
 [CreatedById] [uniqueidentifier] NULL,
-[UpdatedById] [uniqueidentifier] NULL
+[UpdatedById] [uniqueidentifier] NULL,
+[DisplayName] [nvarchar] (256) COLLATE SQL_Latin1_General_CP1_CI_AS NULL
 ) ON [PRIMARY]
 GO
 ALTER TABLE [common].[Roles] ADD CONSTRAINT [PK_identity_Roles] PRIMARY KEY CLUSTERED ([Id]) ON [PRIMARY]

@@ -4,14 +4,19 @@ CREATE TABLE [forms].[FormWorkflowState]
 [FormTemplateId] [uniqueidentifier] NOT NULL,
 [StatusTypeId] [uniqueidentifier] NOT NULL,
 [EditRolesJson] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_FormWorkflowState_CreatedById] DEFAULT (user_name()),
+[CreatedById] [uniqueidentifier] NOT NULL,
 [CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_FormWorkflowState_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
 [UpdatedOn] [datetime2] NULL,
 [IsInitial] [bit] NOT NULL CONSTRAINT [DF_FormWorkflowState_IsInitial] DEFAULT ((0)),
 [CanvasX] [int] NULL,
-[CanvasY] [int] NULL
+[CanvasY] [int] NULL,
+[IsReviewState] [bit] NOT NULL CONSTRAINT [DF_FormWorkflowState_IsReviewState] DEFAULT ((0)),
+[NameOverride] [nvarchar] (100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+[CountsAs] [nvarchar] (50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL
 ) ON [PRIMARY]
+GO
+ALTER TABLE [forms].[FormWorkflowState] ADD CONSTRAINT [CK_FormWorkflowState_CountsAs] CHECK (([CountsAs] IS NULL OR [CountsAs]='ActionRequired' OR [CountsAs]='Submitted'))
 GO
 ALTER TABLE [forms].[FormWorkflowState] ADD CONSTRAINT [CK_FormWorkflowState_EditRoles_IsJson] CHECK ((isjson([EditRolesJson])=(1)))
 GO

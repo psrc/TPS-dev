@@ -3,7 +3,7 @@ CREATE TABLE [reporting].[ReportShareGroupMapping]
 [Id] [uniqueidentifier] NOT NULL,
 [ReportId] [uniqueidentifier] NOT NULL,
 [ReportShareGroupId] [uniqueidentifier] NOT NULL,
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_ReportShareGroupMapping_CreatedById] DEFAULT (user_name()),
+[CreatedById] [uniqueidentifier] NOT NULL,
 [CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_ReportShareGroupMapping_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
 [UpdatedOn] [datetime2] NULL

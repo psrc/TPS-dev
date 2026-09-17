@@ -4,7 +4,7 @@ CREATE TABLE [reporting].[ReportGroup]
 [Description] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 [SortId] [int] NOT NULL,
 [IsActive] [bit] NOT NULL CONSTRAINT [DF_ReportGroup_IsActive] DEFAULT ((0)),
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_ReportGroup_CreatedById] DEFAULT (user_name()),
+[CreatedById] [uniqueidentifier] NOT NULL,
 [CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_ReportGroup_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
 [UpdatedOn] [datetime2] NULL

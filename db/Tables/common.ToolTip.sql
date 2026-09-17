@@ -3,7 +3,7 @@ CREATE TABLE [common].[ToolTip]
 [Id] [uniqueidentifier] NOT NULL,
 [Code] [nvarchar] (100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 [Description] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_ToolTip_CreatedById] DEFAULT (user_name()),
+[CreatedById] [uniqueidentifier] NOT NULL,
 [CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_ToolTip_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
 [UpdatedOn] [datetime2] NULL

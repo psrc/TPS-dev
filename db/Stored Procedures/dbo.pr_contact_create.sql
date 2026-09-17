@@ -46,7 +46,7 @@ Business Rules:
     - CreatedOn timestamp uses UTC time
 ==================================================
 */
-
+-- Modified:    2026-09-12 - PSRC-mte.1 tenancy scoping (@TenantAgencyId/@BypassTenancy)
 CREATE PROCEDURE [dbo].[pr_contact_create]
 (
     @UserId    UNIQUEIDENTIFIER -- User performing the create operation
@@ -57,9 +57,14 @@ CREATE PROCEDURE [dbo].[pr_contact_create]
 ,   @Phone     NVARCHAR(15) = NULL -- Contact's phone number (optional)
 ,   @PhoneExt  NVARCHAR(50) = NULL -- Phone extension (optional)
 ,   @Notes     NVARCHAR(MAX) = NULL -- Additional notes (optional)
+,   @TenantAgencyId UNIQUEIDENTIFIER = NULL -- PSRC-mte.1: caller's agency (NULL = none)
+,   @BypassTenancy  BIT              = 0    -- PSRC-mte.1: 1 = internal caller, no scoping
 ) AS
 BEGIN
     SET NOCOUNT ON;
+    -- PSRC-mte.1: a scoped caller may only name their own agency.
+    IF @BypassTenancy = 0 AND (@TenantAgencyId IS NULL OR @AgencyId IS NULL OR @AgencyId <> @TenantAgencyId)
+        THROW 50403, 'Tenancy: agency is not the caller''s agency.', 1;
     -- Prevent extra result sets from interfering with SELECT statements
 
     -- Generate new unique identifier for the contact
@@ -93,4 +98,6 @@ BEGIN
         WHERE
             Id = @Id;
 END;
+
+
 GO

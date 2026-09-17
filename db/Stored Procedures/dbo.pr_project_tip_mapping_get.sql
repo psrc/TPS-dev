@@ -35,6 +35,7 @@ Business Rules:
     - Default sort by ProjectCode ASC if no sort specified
 ==================================================
 */
+-- Modified:    2026-09-12 - PSRC-mte.1 tenancy scoping (@TenantAgencyId/@BypassTenancy)
 CREATE PROCEDURE [dbo].[pr_project_tip_mapping_get]
 (
     @UserId   UNIQUEIDENTIFIER                   -- User making the request
@@ -42,6 +43,8 @@ CREATE PROCEDURE [dbo].[pr_project_tip_mapping_get]
   , @PageSize INT                                -- Records per page
   , @Skip     INT                                -- Records to skip for pagination
   , @SortBy   SortByArrayType           READONLY -- Dynamic sort configuration
+  , @TenantAgencyId UNIQUEIDENTIFIER = NULL -- PSRC-mte.1: caller's agency (NULL = none)
+  , @BypassTenancy  BIT              = 0    -- PSRC-mte.1: 1 = internal caller, no scoping
 )
 AS
 BEGIN
@@ -131,6 +134,7 @@ BEGIN
                       ON status.Id           = proj.CompletionStatusTypeId
         WHERE
             mapping.TipId = @TipId
+            AND (@BypassTenancy = 1 OR proj.AgencyId = @TenantAgencyId) -- PSRC-mte.1
     )
     -- Return paginated results
     SELECT
@@ -152,8 +156,13 @@ BEGIN
     -- Return total count
     SELECT TotalCount = COUNT(*)
     FROM
-        tip.ProjectTipMapping
+        tip.ProjectTipMapping  AS mapping
+        INNER JOIN tip.Project AS proj
+                   ON proj.Id = mapping.ProjectId
     WHERE
-        TipId = @TipId;
+        mapping.TipId = @TipId
+        AND (@BypassTenancy = 1 OR proj.AgencyId = @TenantAgencyId); -- PSRC-mte.1
 END;
+
+
 GO

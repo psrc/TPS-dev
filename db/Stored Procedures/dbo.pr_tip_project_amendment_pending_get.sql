@@ -2,6 +2,7 @@ SET QUOTED_IDENTIFIER ON
 GO
 SET ANSI_NULLS ON
 GO
+
 -- =============================================
 -- Author:      john.hunter@triskelle.solutions
 -- Create date: 2025-12-17
@@ -9,6 +10,10 @@ GO
 -- Modified:    2026-02-20 - Return all ProgrammedFunding records (including inactive) to match project view
 -- Modified:    2026-04-28 - Added Reporting tab fields (Project_Pending.ReportDescription, ProjectAmendment.ReportDescription, 4 report flags)
 -- Modified:    2026-05-05 - Section 9 returns logs across all ProjectAmendment rows for the same ProjectId so prior amendments' logs are visible in the Project Logs tab (PSRC-a83)
+-- Modified:    2026-09-07 - Return ProgrammedFunding_Pending.IsAmendmentAddition so the client can offer Remove (PSRC-gj2o)
+-- Modified:    2026-09-10 - Section 7 returns each other amendment's ProjectPendingId so the warning banner can link straight to the project (PSRC-lqwf)
+-- Modified:    2026-09-10 - Return each funding row's LineageId; Section 10 maps audit-log fundingRowIds to lineages for the per-row history viewer (PSRC-a8e5)
+-- Modified:    2026-09-12 - PSRC-mte.1 tenancy scoping (@TenantAgencyId/@BypassTenancy)
 -- Description: Retrieves comprehensive pending project information for an amendment
 --              including project details, contacts, mappings, budgets, and funding data.
 --              Also returns information about other amendments containing the same project
@@ -18,9 +23,15 @@ CREATE PROCEDURE [dbo].[pr_tip_project_amendment_pending_get]
     @UserId           UNIQUEIDENTIFIER
   , @AmendmentId      UNIQUEIDENTIFIER
   , @ProjectPendingId UNIQUEIDENTIFIER
+  , @TenantAgencyId    UNIQUEIDENTIFIER = NULL -- PSRC-mte.1: caller's agency (NULL = none)
+  , @BypassTenancy     BIT              = 0    -- PSRC-mte.1: 1 = internal caller, no scoping
 AS
 BEGIN
     SET NOCOUNT ON;
+
+    -- PSRC-mte.1: a scoped caller may only touch a pending project in their own agency.
+    IF @BypassTenancy = 0 AND NOT EXISTS (SELECT 1 FROM tip.Project_Pending WHERE Id = @ProjectPendingId AND AgencyId = @TenantAgencyId)
+        THROW 50403, 'Tenancy: pending project is not in the caller''s agency.', 1;
 
     -- Variable to hold original ProjectId for "Other Amendments" query
     DECLARE @ProjectId UNIQUEIDENTIFIER;
@@ -215,7 +226,9 @@ BEGIN
       , FhwaObligatedDate       = pf.FhwaObligatedDate
       , FhwaObligatedNumber     = pf.FhwaObligatedNumber
       , OriginRecordId          = pf.OriginRecordId
+      , LineageId               = pf.LineageId
       , IsActive                = pf.IsActive
+      , IsAmendmentAddition     = pf.IsAmendmentAddition
       , CreatedById             = pf.CreatedById
       , CreatedOn               = pf.CreatedOn
       , UpdatedById             = pf.UpdatedById
@@ -231,17 +244,24 @@ BEGIN
     -- =============================================
     -- Get list of other amendments that also contain this project (excluding current amendment)
     -- Only include amendments that are NOT in Posted status (posted amendments are finalized)
+    -- ProjectPendingId is the project's id INSIDE that amendment, which is what its route needs.
+    -- Each amendment holds its own Project_Pending row, so the id differs per amendment; without
+    -- it the caller can only guess, and the link lands on the amendment without opening the
+    -- project (PSRC-lqwf).
     SELECT
-        AmendmentId   = a.Id
-      , AmendmentName = a.Name
-      , StatusCode    = ast.Code
-      , StatusName    = ast.Description
+        AmendmentId      = a.Id
+      , AmendmentName    = a.Name
+      , StatusCode       = ast.Code
+      , StatusName       = ast.Description
+      , ProjectPendingId = pp.Id
     FROM
         tip.ProjectAmendment AS pa
         INNER JOIN tip.Amendment AS a
                 ON a.Id = pa.AmendmentId
         INNER JOIN tip.AmendmentStatusType AS ast
                 ON ast.Id = a.AmendmentStatusTypeId
+        LEFT JOIN tip.Project_Pending AS pp
+               ON pp.ProjectAmendmentId = pa.Id
     WHERE
             pa.ProjectId    = @ProjectId
         AND NOT pa.AmendmentId = @AmendmentId
@@ -300,5 +320,42 @@ BEGIN
         OR (@ProjectId IS NOT NULL AND pa.ProjectId = @ProjectId)
     ORDER BY
         pal.CreatedOn DESC;
+
+    -- =============================================
+    -- SECTION 10: Funding-row lineage map (PSRC-a8e5)
+    -- =============================================
+    -- Audit logs key a funding change by fundingRowId, which is the row's OriginRecordId (or its
+    -- own Id for a split half) AS IT WAS in that amendment - and every amendment re-keys origins.
+    -- This maps each key back to the row's LineageId (PSRC-yh7o), so the client can follow one
+    -- funding row through every amendment's log. Keys are lower-case to match
+    -- AuditLogService.FundingRowKey. AmendmentId NULL = a posted row, the fallback for edits made
+    -- to the posted project directly (logged under an Admin- amendment with no pending rows).
+    SELECT DISTINCT
+        AmendmentId  = pa.AmendmentId
+      , FundingRowId = LOWER(CAST(k.RowKey AS NVARCHAR(36)))
+      , LineageId    = pf.LineageId
+    FROM
+        tip.ProjectAmendment AS pa
+        INNER JOIN tip.Project_Pending AS pp
+                ON pp.ProjectAmendmentId = pa.Id
+        INNER JOIN tip.ProgrammedFunding_Pending AS pf
+                ON pf.Project_PendingId = pp.Id
+        CROSS APPLY (VALUES (pf.Id), (pf.OriginRecordId)) AS k (RowKey)
+    WHERE
+            pa.ProjectId  = @ProjectId
+        AND pf.LineageId IS NOT NULL
+    UNION
+    SELECT
+        AmendmentId  = NULL
+      , FundingRowId = LOWER(CAST(k.RowKey AS NVARCHAR(36)))
+      , LineageId    = pf.LineageId
+    FROM
+        tip.ProgrammedFunding AS pf
+        CROSS APPLY (VALUES (pf.Id), (pf.OriginRecordId)) AS k (RowKey)
+    WHERE
+            pf.ProjectId  = @ProjectId
+        AND pf.LineageId IS NOT NULL;
 END;
+
+
 GO

@@ -35,7 +35,7 @@ CREATE TABLE [tip].[Project_Pending]
 [UpwpPolicy] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 [UpwpIsEquipmentPurchaseFlag] [bit] NULL CONSTRAINT [DF_Project_Pending_UpwpIsEquipmentPurchaseFlag] DEFAULT ((0)),
 [PsrcComments] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_Project_Pending_CreatedById] DEFAULT (user_name()),
+[CreatedById] [uniqueidentifier] NOT NULL,
 [CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_Project_Pending_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
 [UpdatedOn] [datetime2] NULL,

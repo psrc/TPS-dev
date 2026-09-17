@@ -6,7 +6,7 @@ CREATE TABLE [tip].[ProjectAmendmentLog]
 [SourceRecordId] [uniqueidentifier] NULL,
 [Description] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 [RawChanges] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_ProjectAmendmentLog_CreatedById] DEFAULT (user_name()),
+[CreatedById] [uniqueidentifier] NOT NULL,
 [CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_ProjectAmendmentLog_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
 [UpdatedOn] [datetime2] NULL

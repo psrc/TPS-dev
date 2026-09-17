@@ -1,9 +1,10 @@
 SET QUOTED_IDENTIFIER ON
 GO
-SET ANSI_NULLS OFF
+SET ANSI_NULLS ON
 GO
 -- =============================================
 -- Author:      john.hunter@triskelle.solutions
+-- Modified:    2026-09-12 - PSRC-mte.1 tenancy scoping (@TenantAgencyId/@BypassTenancy)
 -- Create date: 2025-12-18
 -- Description: Retrieves all review area records for a project amendment
 --              including type descriptions, status descriptions, and reviewer information.
@@ -19,9 +20,15 @@ CREATE PROCEDURE [dbo].[pr_tip_project_amendment_review_areas_get]
     @UserId      UNIQUEIDENTIFIER
   , @AmendmentId UNIQUEIDENTIFIER
   , @ProjectId   UNIQUEIDENTIFIER
+  , @TenantAgencyId UNIQUEIDENTIFIER = NULL -- PSRC-mte.1: caller's agency (NULL = none)
+  , @BypassTenancy  BIT              = 0    -- PSRC-mte.1: 1 = internal caller, no scoping
 AS
 BEGIN
     SET NOCOUNT ON;
+
+    -- PSRC-mte.1: a scoped caller may only touch a project in their own agency.
+    IF @BypassTenancy = 0 AND NOT EXISTS (SELECT 1 FROM tip.Project WHERE Id = @ProjectId AND AgencyId = @TenantAgencyId)
+        THROW 50403, 'Tenancy: project is not in the caller''s agency.', 1;
 
     -- Variable to hold ProjectAmendment.Id for related queries
     DECLARE @ProjectAmendmentId UNIQUEIDENTIFIER;
@@ -155,4 +162,6 @@ BEGIN
     ORDER BY
         parat.SortId ASC;
 END;
+
+
 GO

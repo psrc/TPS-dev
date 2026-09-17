@@ -7,10 +7,11 @@ CREATE TABLE [common].[HelpSection]
 [SortId] [int] NOT NULL CONSTRAINT [DF_HelpSection_SortId] DEFAULT ((0)),
 [IsHidden] [bit] NOT NULL CONSTRAINT [DF_HelpSection_IsHidden] DEFAULT ((0)),
 [IsSystem] [bit] NOT NULL CONSTRAINT [DF_HelpSection_IsSystem] DEFAULT ((0)),
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_HelpSection_CreatedById] DEFAULT (user_name()),
+[CreatedById] [uniqueidentifier] NOT NULL,
 [CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_HelpSection_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
-[UpdatedOn] [datetime2] NULL
+[UpdatedOn] [datetime2] NULL,
+[IsStaffOnly] [bit] NOT NULL CONSTRAINT [DF_HelpSection_IsStaffOnly] DEFAULT ((0))
 ) ON [PRIMARY]
 GO
 ALTER TABLE [common].[HelpSection] ADD CONSTRAINT [PK_HelpSection] PRIMARY KEY CLUSTERED ([Id]) ON [PRIMARY]
@@ -20,6 +21,8 @@ GO
 EXEC sp_addextendedproperty N'MS_Description', N'Feather icon name (e.g. book-open) shown next to the section name, rendered via the app-icon component.', 'SCHEMA', N'common', 'TABLE', N'HelpSection', 'COLUMN', N'Icon'
 GO
 EXEC sp_addextendedproperty N'MS_Description', N'When 1, the section is retained but excluded from the public Help Center.', 'SCHEMA', N'common', 'TABLE', N'HelpSection', 'COLUMN', N'IsHidden'
+GO
+EXEC sp_addextendedproperty N'MS_Description', N'When 1, the section and its topics are shown on the Help Center only to PSRC staff (users of the internal agency). IsHidden still hides it from everyone.', 'SCHEMA', N'common', 'TABLE', N'HelpSection', 'COLUMN', N'IsStaffOnly'
 GO
 EXEC sp_addextendedproperty N'MS_Description', N'When 1, the section is protected and cannot be deleted (e.g. the User Guide section).', 'SCHEMA', N'common', 'TABLE', N'HelpSection', 'COLUMN', N'IsSystem'
 GO

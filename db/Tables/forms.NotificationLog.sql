@@ -9,13 +9,16 @@ CREATE TABLE [forms].[NotificationLog]
 [DeliveryStatus] [nvarchar] (50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 [RetryCount] [int] NOT NULL CONSTRAINT [DF_FormsNotificationLog_RetryCount] DEFAULT ((0)),
 [ErrorMessage] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_FormsNotificationLog_CreatedById] DEFAULT (user_name()),
+[CreatedById] [uniqueidentifier] NOT NULL,
 [CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_FormsNotificationLog_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
-[UpdatedOn] [datetime2] NULL
+[UpdatedOn] [datetime2] NULL,
+[AgencyId] [uniqueidentifier] NULL
 ) ON [PRIMARY]
 GO
 ALTER TABLE [forms].[NotificationLog] ADD CONSTRAINT [PK_FormsNotificationLog] PRIMARY KEY CLUSTERED ([Id]) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [IX_NotificationLog_AgencyId] ON [forms].[NotificationLog] ([AgencyId]) ON [PRIMARY]
 GO
 CREATE NONCLUSTERED INDEX [IX_FormsNotificationLog_AssignmentId] ON [forms].[NotificationLog] ([AssignmentId]) ON [PRIMARY]
 GO

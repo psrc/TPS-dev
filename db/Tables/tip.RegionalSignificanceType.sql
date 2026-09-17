@@ -6,7 +6,7 @@ CREATE TABLE [tip].[RegionalSignificanceType]
 [SortId] [int] NULL,
 [EffectiveDate] [date] NULL,
 [EndDate] [date] NULL,
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_RegionalSignificanceType_CreatedById] DEFAULT (user_name()),
+[CreatedById] [uniqueidentifier] NOT NULL,
 [CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_RegionalSignificanceType_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
 [UpdatedOn] [datetime2] NULL

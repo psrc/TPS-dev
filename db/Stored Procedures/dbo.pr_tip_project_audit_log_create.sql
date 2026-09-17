@@ -13,6 +13,17 @@ GO
 -- Modified:    2026-02-20 - Add Award Reference to Modified display so NULL-to-value changes are logged
 -- Modified:    2026-03-31 - Switch to per-subfield funding changes to fix merge bug with sequential saves
 -- Modified:    2026-04-02 - Display funding source Description instead of Code in audit log labels
+-- Modified:    2026-09-08 - PSRC-cs0z: key funding subfields on the row (OriginRecordId) rather
+--                           than {fundingSource|phase|year}, so editing any of those three reads
+--                           as one change instead of a remove plus an add. Fund source, phase and
+--                           year become ordinary subfields; unchanged subfields are kept as the
+--                           context Miles's TIP-012 sketch renders on both sides; fundingRowId and
+--                           subField are carried into the JSON so the client can group a row; the
+--                           amendment merge matches on (row, field) and only drops a funding row
+--                           once EVERY subfield has reverted.
+-- Modified:    2026-09-08 - PSRC-cs0z: absent funding values stay NULL rather than becoming
+--                           '(none)' / '(no FHWA#)'. Only the client knows whether a missing value
+--                           means "empty" or "the row did not exist on that side".
 -- Description: Creates or updates audit log records for TIP project field changes.
 --              Handles both regular project updates (creates administrative amendment)
 --              and amendment workflow updates (uses provided amendment).
@@ -29,32 +40,51 @@ GO
 --   - Tracks userId, userEmail, changedOn at field level (per-field timestamps)
 --   - Returns generated/updated log IDs
 --
--- Field Categories:
---   'Phase' -> Phase Logs
---   'Administrative' -> Administrative Logs
---   'Amendment' -> Amendment Logs
+-- Field Categories (Asana TIP-012/013 Q19, 2026-09-09 — collapsed to two log types):
+--   'Phase'          -> folded into Amendment Logs at STEP 1b
+--   'Administrative' -> folded into Amendment Logs at STEP 1b
+--   'Amendment'      -> Amendment Logs
+--
+-- Modified:    2026-09-09 - PSRC-6ksm - fold the Phase and Administrative categories into
+--                           Amendment at STEP 1c.
+-- Modified:    2026-09-10 - PSRC-shiu - carry ChangeKind through, so a split funding row logs as
+--                           'Split - Added' / 'Split - Modified' instead of two entries a user
+--                           cannot tell were one operation.
+-- Modified:    2026-09-10 - Asana TIP-005 - revert detection is now null-safe. A field or funding
+--                           row that ends where it started is dropped even when that value is
+--                           blank, so a row added and removed within one amendment leaves no log.
+-- Modified:    2026-09-09 - PSRC-cev0 - stamp TipId on the administrative amendment this creates.
+--                           Without it every regular project edit left an amendment with a NULL
+--                           TipId, which tip.Amendment.TipId NOT NULL then rejects outright.
+-- Modified:    2026-09-09 - PSRC-yipi - removed the Phase and Administrative per-category blocks,
+--                           their log-type lookups and their category flags, all unreachable once
+--                           the fold above landed.
+-- Modified:    2026-09-12 - PSRC-mte.1 tenancy scoping (@TenantAgencyId/@BypassTenancy)
 -- =============================================
 CREATE PROCEDURE [dbo].[pr_tip_project_audit_log_create]
     @UserId            UNIQUEIDENTIFIER,           -- ID of the user making the changes
     @ProjectId         UNIQUEIDENTIFIER,           -- ID of the project being modified
     @AmendmentId       UNIQUEIDENTIFIER = NULL,    -- NULL for regular updates (creates admin amendment)
     @ProjectAmendmentId UNIQUEIDENTIFIER = NULL,   -- NULL for regular updates (creates project amendment)
-    @FieldChanges      dbo.ProjectFieldChangeType READONLY -- Table of field changes
+    @FieldChanges      dbo.ProjectFieldChangeType READONLY, -- Table of field changes
+    @TenantAgencyId UNIQUEIDENTIFIER = NULL,      -- PSRC-mte.1: caller's agency (NULL = none)
+    @BypassTenancy  BIT = 0                       -- PSRC-mte.1: 1 = internal caller, no scoping
 AS
 BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
 
+    -- PSRC-mte.1: internal-only. This object has no owning agency, so a scoped caller has no
+    -- rows here at all; refusing beats guessing.
+    IF @BypassTenancy = 0
+        THROW 50403, 'Tenancy: pr_tip_project_audit_log_create is internal-only.', 1;
+
     -- =============================================
     -- LOOKUP: Log Type IDs (by Code to support different environments)
     -- =============================================
     DECLARE @AmendmentLogTypeId UNIQUEIDENTIFIER;
-    DECLARE @PhaseLogTypeId UNIQUEIDENTIFIER;
-    DECLARE @AdministrativeLogTypeId UNIQUEIDENTIFIER;
 
     SELECT @AmendmentLogTypeId = Id FROM tip.ProjectAmendmentLogType WHERE Code = 'Amendment Logs';
-    SELECT @PhaseLogTypeId = Id FROM tip.ProjectAmendmentLogType WHERE Code = 'Phase Logs';
-    SELECT @AdministrativeLogTypeId = Id FROM tip.ProjectAmendmentLogType WHERE Code = 'Administrative Logs';
 
     -- =============================================
     -- LOOKUP: Amendment Status and Section Types (by Code to support different environments)
@@ -64,6 +94,12 @@ BEGIN
     DECLARE @CompleteReviewStatusId UNIQUEIDENTIFIER;
 
     SELECT @PostedStatusId = Id FROM tip.AmendmentStatusType WHERE Code = 'Posted';
+
+    -- PSRC-cev0: the administrative amendment this procedure may create below needs a TipId, the
+    -- same as any other amendment. It amends the project as it stands, so it belongs to the TIP in
+    -- effect — matching pr_tip_amendment_create's fallback.
+    DECLARE @CurrentTipId UNIQUEIDENTIFIER;
+    SELECT TOP (1) @CurrentTipId = Id FROM tip.Tip WHERE IsCurrent = 1;
     SELECT @DefaultSectionTypeId = Id FROM tip.AmendmentSectionType WHERE Code = 'A';
     SELECT @CompleteReviewStatusId = Id FROM tip.ProjectAmendmentReviewStatusType WHERE Code = 'Complete';
 
@@ -80,13 +116,24 @@ BEGIN
         NewValue         NVARCHAR(MAX) NULL,
         OldValueDisplay  NVARCHAR(500) NULL,
         NewValueDisplay  NVARCHAR(500) NULL,
-        FieldCategory    NVARCHAR(50)  NOT NULL
+        FieldCategory    NVARCHAR(50)  NOT NULL,
+        -- PSRC-cs0z: which programmed-funding row a subfield belongs to, so the client can
+        -- render one block per row. NULL for every non-funding change.
+        FundingRowId     NVARCHAR(36)  NULL,
+        SubFieldName     NVARCHAR(50)  NULL,
+        -- PSRC-shiu: qualifies HOW the change came about where Added/Modified/Removed alone is
+        -- not the whole story. 'Split' marks both halves of a split funding row.
+        ChangeKind       NVARCHAR(20)  NULL
     );
 
-    INSERT INTO @ChangedFields (FieldName, OldValue, NewValue, OldValueDisplay, NewValueDisplay, FieldCategory)
-    SELECT FieldName, OldValue, NewValue, OldValueDisplay, NewValueDisplay, FieldCategory
+    INSERT INTO @ChangedFields (FieldName, OldValue, NewValue, OldValueDisplay, NewValueDisplay, FieldCategory, ChangeKind)
+    SELECT FieldName, OldValue, NewValue, OldValueDisplay, NewValueDisplay, FieldCategory, ChangeKind
     FROM @FieldChanges
-    WHERE (OldValue IS NULL AND NewValue IS NOT NULL)
+    -- PSRC-cs0z: funding subfields come through even when unchanged. AuditLogService only emits
+    -- a funding row at all once something on it differs, so an all-equal row never reaches here;
+    -- the equal subfields that do are the context Miles's sketch renders on both sides.
+    WHERE FieldName LIKE 'ProgrammedFunding:%'
+       OR (OldValue IS NULL AND NewValue IS NOT NULL)
        OR (OldValue IS NOT NULL AND NewValue IS NULL)
        OR (OldValue <> NewValue);
 
@@ -237,95 +284,91 @@ BEGIN
     INNER JOIN tip.CompletionStatusType t ON TRY_CAST(cf.NewValue AS UNIQUEIDENTIFIER) = t.Id
     WHERE cf.FieldName = 'CompletionStatusTypeId' AND cf.NewValue IS NOT NULL AND cf.NewValueDisplay IS NULL;
 
-    -- ProgrammedFunding per-subfield display resolution
-    -- FieldName format: ProgrammedFunding:{fundingSourceTypeId}|{phaseTypeId}|{year}:{SubFieldName}
-    -- Extract composite key parts from FieldName for the display label
-    -- Resolve to "Programmed Funding (AwardRef - Phase - Year) SubFieldLabel" display format
-
-    -- Parse the composite key parts from the FieldName
-    -- FieldName structure: ProgrammedFunding:{compositeKey}:{SubFieldName}
-    -- compositeKey structure: {fundingSourceTypeId}|{phaseTypeId}|{year}
+    -- ProgrammedFunding per-subfield display resolution.
+    -- FieldName format (PSRC-cs0z): ProgrammedFunding:{originRowId}:{SubFieldName}
+    --
+    -- The key used to be {fundingSourceTypeId}|{phaseTypeId}|{year}, which meant editing any of
+    -- those three re-keyed the row and read as a remove plus an add. It is now the row's own
+    -- identity, so those three are ordinary subfields that can show a before and an after — which
+    -- is what Miles's sketch asks for.
+    --
+    -- The label therefore no longer embeds fund source / phase / year: those are values inside the
+    -- block now, and baking a changeable value into the field name would make the merge below
+    -- treat one row as two. FundingRowId carries the grouping instead.
     UPDATE cf SET
-        FieldName = 'Programmed Funding ('
-            + ISNULL(fst.Description, '')
-            + ' - '
-            + ISNULL(pt.Code, '')
-            + ' - '
-            + ISNULL(keyParts.FundingYear, '')
-            + CASE
-                WHEN ar.Id IS NOT NULL
-                    THEN ' - ' + COALESCE(NULLIF(ar.SubAwardReference, ''), ar.AwardRef)
-                ELSE ''
-              END
-            + ') '
+        FundingRowId = NULLIF(parts.RowId, ''),
+        SubFieldName = NULLIF(parts.SubFieldName, ''),
+        FieldName = 'Programmed Funding '
             + CASE parts.SubFieldName
-                WHEN 'AwardReferenceId' THEN 'Award Ref'
-                WHEN 'Amount' THEN 'Amount'
+                WHEN 'AwardReferenceId'        THEN 'Award Ref'
+                WHEN 'PhaseTypeId'             THEN 'Phase'
+                WHEN 'ProgrammedFundingYear'   THEN 'Year'
                 WHEN 'EstimatedObligationDate' THEN 'Est Oblig Date'
-                WHEN 'IsObligatedFlag' THEN 'Obligated'
-                WHEN 'FtaObligatedDate' THEN 'FTA Date'
-                WHEN 'FtaObligatedNumber' THEN 'FTA #'
-                WHEN 'FhwaObligatedDate' THEN 'FHWA Date'
-                WHEN 'FhwaObligatedNumber' THEN 'FHWA #'
+                WHEN 'FundingSourceTypeId'     THEN 'Fund Source'
+                WHEN 'Amount'                  THEN 'Amount'
+                WHEN 'IsObligatedFlag'         THEN 'Obligated'
+                WHEN 'FtaObligatedDate'        THEN 'FTA Date'
+                WHEN 'FtaObligatedNumber'      THEN 'FTA #'
+                WHEN 'FhwaObligatedDate'       THEN 'FHWA Date'
+                WHEN 'FhwaObligatedNumber'     THEN 'FHWA #'
                 ELSE parts.SubFieldName
               END,
         OldValueDisplay = CASE WHEN cf.OldValue IS NULL THEN NULL
             ELSE CASE parts.SubFieldName
-                WHEN 'AwardReferenceId' THEN ISNULL(COALESCE(NULLIF(oldAr.SubAwardReference, ''), oldAr.AwardRef), '(none)')
-                WHEN 'Amount' THEN '$' + FORMAT(TRY_CAST(cf.OldValue AS BIGINT), 'N0')
-                WHEN 'IsObligatedFlag' THEN CASE cf.OldValue WHEN '1' THEN 'Yes' WHEN '0' THEN 'No' ELSE '(none)' END
-                ELSE ISNULL(NULLIF(cf.OldValue, ''), '(none)')
+                WHEN 'AwardReferenceId'    THEN ISNULL(COALESCE(NULLIF(oldAr.SubAwardReference, ''), oldAr.AwardRef), '(none)')
+                WHEN 'PhaseTypeId'         THEN ISNULL(oldPt.Code, '(none)')
+                WHEN 'FundingSourceTypeId' THEN ISNULL(oldFst.Description, '(none)')
+                WHEN 'Amount'              THEN '$' + FORMAT(TRY_CAST(cf.OldValue AS BIGINT), 'N0')
+                WHEN 'IsObligatedFlag'     THEN CASE cf.OldValue WHEN '1' THEN 'Yes' WHEN '0' THEN 'No' ELSE '(none)' END
+                -- PSRC-cs0z: an absent value stays NULL. The client decides whether that reads
+                -- "not set" (the sub-field is empty) or an em dash (the object did not exist on
+                -- that side) — the server cannot tell those apart.
+                ELSE NULLIF(cf.OldValue, '')
             END END,
         NewValueDisplay = CASE WHEN cf.NewValue IS NULL THEN NULL
             ELSE CASE parts.SubFieldName
-                WHEN 'AwardReferenceId' THEN ISNULL(COALESCE(NULLIF(newAr.SubAwardReference, ''), newAr.AwardRef), '(none)')
-                WHEN 'Amount' THEN '$' + FORMAT(TRY_CAST(cf.NewValue AS BIGINT), 'N0')
-                WHEN 'IsObligatedFlag' THEN CASE cf.NewValue WHEN '1' THEN 'Yes' WHEN '0' THEN 'No' ELSE '(none)' END
-                ELSE ISNULL(NULLIF(cf.NewValue, ''), '(none)')
+                WHEN 'AwardReferenceId'    THEN ISNULL(COALESCE(NULLIF(newAr.SubAwardReference, ''), newAr.AwardRef), '(none)')
+                WHEN 'PhaseTypeId'         THEN ISNULL(newPt.Code, '(none)')
+                WHEN 'FundingSourceTypeId' THEN ISNULL(newFst.Description, '(none)')
+                WHEN 'Amount'              THEN '$' + FORMAT(TRY_CAST(cf.NewValue AS BIGINT), 'N0')
+                WHEN 'IsObligatedFlag'     THEN CASE cf.NewValue WHEN '1' THEN 'Yes' WHEN '0' THEN 'No' ELSE '(none)' END
+                -- PSRC-cs0z: an absent value stays NULL. The client decides whether that reads
+                -- "not set" (the sub-field is empty) or an em dash (the object did not exist on
+                -- that side) — the server cannot tell those apart.
+                ELSE NULLIF(cf.NewValue, '')
             END END
     FROM @ChangedFields cf
-    -- Parse composite key and subfield name from FieldName
-    -- FieldName = 'ProgrammedFunding:{fstId}|{phaseTypeId}|{year}:{SubFieldName}'
-    -- Uses IIF guards to prevent negative SUBSTRING lengths for non-funding rows
+    -- Split 'ProgrammedFunding:{rowId}:{SubFieldName}' on its LAST colon. IIF guards keep
+    -- SUBSTRING lengths non-negative for rows that are not funding changes.
     CROSS APPLY (
-        SELECT
-            CHARINDEX(':', REVERSE(cf.FieldName)) AS RevColonPos
+        SELECT CHARINDEX(':', REVERSE(cf.FieldName)) AS RevColonPos
     ) rc
     CROSS APPLY (
-        SELECT
-            IIF(rc.RevColonPos > 0, LEN(cf.FieldName) - rc.RevColonPos + 1, 0) AS LastColonPos
+        SELECT IIF(rc.RevColonPos > 0, LEN(cf.FieldName) - rc.RevColonPos + 1, 0) AS LastColonPos
     ) lc
     CROSS APPLY (
         SELECT
-            IIF(lc.LastColonPos > 19, SUBSTRING(cf.FieldName, 19, lc.LastColonPos - 19), '') AS CompositeKey,
+            IIF(lc.LastColonPos > 19, SUBSTRING(cf.FieldName, 19, lc.LastColonPos - 19), '') AS RowId,
             IIF(lc.LastColonPos > 0, SUBSTRING(cf.FieldName, lc.LastColonPos + 1, LEN(cf.FieldName)), '') AS SubFieldName
     ) parts
-    CROSS APPLY (
-        SELECT
-            PARSENAME(REPLACE(parts.CompositeKey, '|', '.'), 3) AS FundingSourceTypeId,
-            PARSENAME(REPLACE(parts.CompositeKey, '|', '.'), 2) AS PhaseTypeId,
-            PARSENAME(REPLACE(parts.CompositeKey, '|', '.'), 1) AS FundingYear
-    ) keyParts
-    -- Look up FundingSourceType for label
-    LEFT JOIN tip.FundingSourceType fst
-        ON TRY_CAST(NULLIF(keyParts.FundingSourceTypeId, '') AS UNIQUEIDENTIFIER) = fst.Id
-    -- Look up PhaseType for label
-    LEFT JOIN tip.PhaseType pt
-        ON TRY_CAST(NULLIF(keyParts.PhaseTypeId, '') AS UNIQUEIDENTIFIER) = pt.Id
-    -- Look up AwardReference display for AwardReferenceId subfield values
     LEFT JOIN tip.AwardReference oldAr
         ON parts.SubFieldName = 'AwardReferenceId'
         AND TRY_CAST(NULLIF(cf.OldValue, '') AS UNIQUEIDENTIFIER) = oldAr.Id
     LEFT JOIN tip.AwardReference newAr
         ON parts.SubFieldName = 'AwardReferenceId'
         AND TRY_CAST(NULLIF(cf.NewValue, '') AS UNIQUEIDENTIFIER) = newAr.Id
-    -- Look up AwardReference for the funding row label (from any AwardReferenceId subfield in same batch)
-    LEFT JOIN tip.AwardReference ar
-        ON ar.Id = (
-            SELECT TOP 1 TRY_CAST(NULLIF(COALESCE(cf2.NewValue, cf2.OldValue), '') AS UNIQUEIDENTIFIER)
-            FROM @ChangedFields cf2
-            WHERE cf2.FieldName LIKE 'ProgrammedFunding:' + parts.CompositeKey + ':AwardReferenceId'
-        )
+    LEFT JOIN tip.PhaseType oldPt
+        ON parts.SubFieldName = 'PhaseTypeId'
+        AND TRY_CAST(NULLIF(cf.OldValue, '') AS UNIQUEIDENTIFIER) = oldPt.Id
+    LEFT JOIN tip.PhaseType newPt
+        ON parts.SubFieldName = 'PhaseTypeId'
+        AND TRY_CAST(NULLIF(cf.NewValue, '') AS UNIQUEIDENTIFIER) = newPt.Id
+    LEFT JOIN tip.FundingSourceType oldFst
+        ON parts.SubFieldName = 'FundingSourceTypeId'
+        AND TRY_CAST(NULLIF(cf.OldValue, '') AS UNIQUEIDENTIFIER) = oldFst.Id
+    LEFT JOIN tip.FundingSourceType newFst
+        ON parts.SubFieldName = 'FundingSourceTypeId'
+        AND TRY_CAST(NULLIF(cf.NewValue, '') AS UNIQUEIDENTIFIER) = newFst.Id
     WHERE cf.FieldName LIKE 'ProgrammedFunding:%';
 
     -- If no changes, exit early
@@ -337,16 +380,26 @@ BEGIN
     END;
 
     -- =============================================
+    -- STEP 1c: Fold the retired categories into Amendment (Asana TIP-012/013 Q19)
+    -- =============================================
+    -- The client collapsed four log types to two: Amendment Logs, for everything a PSRC user
+    -- changes while working an amendment, and Posting Logs, written when the amendment is posted.
+    -- Phase and Administrative changes are both the former, so they are relabelled here rather
+    -- than at each per-category block below. Doing it at the source means the Phase
+    -- and Administrative blocks were unreachable and have since been removed (PSRC-yipi), so every
+    -- change flows through the Amendment block — which already merges into one log per
+    -- ProjectAmendment + LogType. Repointing the type IDs instead would have left three blocks
+    -- contending for the same log row.
+    UPDATE @ChangedFields
+    SET    FieldCategory = 'Amendment'
+    WHERE  FieldCategory IN ('Phase', 'Administrative');
+
+    -- =============================================
     -- STEP 2: Group changes by category
     -- =============================================
-    DECLARE @HasPhaseChanges BIT = 0;
-    DECLARE @HasAdminChanges BIT = 0;
+    -- Only one category survives Q19; STEP 1c has already folded the other two into it.
     DECLARE @HasAmendmentChanges BIT = 0;
 
-    IF EXISTS (SELECT 1 FROM @ChangedFields WHERE FieldCategory = 'Phase')
-        SET @HasPhaseChanges = 1;
-    IF EXISTS (SELECT 1 FROM @ChangedFields WHERE FieldCategory = 'Administrative')
-        SET @HasAdminChanges = 1;
     IF EXISTS (SELECT 1 FROM @ChangedFields WHERE FieldCategory = 'Amendment')
         SET @HasAmendmentChanges = 1;
 
@@ -388,9 +441,9 @@ BEGIN
 
                 -- Create Amendment with IsAdministrativeAmendmentFlag = TRUE
                 INSERT INTO tip.Amendment
-                    (Id, AmendmentStatusTypeId, Name, IsAdministrativeAmendmentFlag, EffectiveDate, CreatedById, CreatedOn)
+                    (Id, AmendmentStatusTypeId, Name, IsAdministrativeAmendmentFlag, EffectiveDate, TipId, CreatedById, CreatedOn)
                 VALUES
-                    (@EffectiveAmendmentId, @PostedStatusId, @ExpectedAmendmentName, 1, @Today, @UserId, @Now);
+                    (@EffectiveAmendmentId, @PostedStatusId, @ExpectedAmendmentName, 1, @Today, @CurrentTipId, @UserId, @Now);
 
                 -- Create ProjectAmendment linking project to amendment
                 INSERT INTO tip.ProjectAmendment
@@ -428,272 +481,8 @@ BEGIN
         -- Table to collect generated/updated log IDs
         DECLARE @GeneratedLogIds TABLE (LogId UNIQUEIDENTIFIER NOT NULL);
 
-        -- 4a: Handle Phase Log if phase changes exist
-        IF @HasPhaseChanges = 1
-        BEGIN
-            DECLARE @PhaseLogId UNIQUEIDENTIFIER;
-            DECLARE @ExistingPhaseJson NVARCHAR(MAX);
-
-            -- Check for existing log record
-            SELECT @PhaseLogId = Id, @ExistingPhaseJson = RawChanges
-            FROM tip.ProjectAmendmentLog
-            WHERE ProjectAmendmentId = @EffectiveProjectAmendmentId
-              AND ProjectAmendmentLogTypeId = @PhaseLogTypeId;
-
-            -- Build JSON for new phase changes (includes user info at field level)
-            DECLARE @NewPhaseChangesJson NVARCHAR(MAX);
-            SELECT @NewPhaseChangesJson = (
-                SELECT
-                    FieldName AS [field],
-                    COALESCE(OldValueDisplay, OldValue) AS [oldValue],
-                    COALESCE(NewValueDisplay, NewValue) AS [newValue],
-                    CASE
-                        WHEN OldValue IS NULL AND NewValue IS NOT NULL THEN 'Added'
-                        WHEN OldValue IS NOT NULL AND NewValue IS NULL THEN 'Removed'
-                        ELSE 'Modified'
-                    END AS [changeType],
-                    LOWER(CAST(@UserId AS NVARCHAR(36))) AS [changedById],
-                    @UserEmail AS [changedByEmail],
-                    @Now AS [changedOn]
-                FROM @ChangedFields
-                WHERE FieldCategory = 'Phase'
-                FOR JSON PATH
-            );
-
-            IF @PhaseLogId IS NOT NULL
-            BEGIN
-                -- Merge with existing record
-                DECLARE @MergedPhaseJson NVARCHAR(MAX);
-
-                -- Parse existing JSON and merge (new values overwrite existing for same field)
-                WITH ExistingFields AS (
-                    SELECT
-                        JSON_VALUE(value, '$.field') AS field,
-                        JSON_VALUE(value, '$.oldValue') AS oldValue,
-                        JSON_VALUE(value, '$.newValue') AS newValue,
-                        JSON_VALUE(value, '$.changeType') AS changeType,
-                        JSON_VALUE(value, '$.changedById') AS changedById,
-                        JSON_VALUE(value, '$.changedByEmail') AS changedByEmail,
-                        JSON_VALUE(value, '$.changedOn') AS changedOn
-                    FROM OPENJSON(@ExistingPhaseJson)
-                ),
-                NewFields AS (
-                    SELECT
-                        JSON_VALUE(value, '$.field') AS field,
-                        JSON_VALUE(value, '$.oldValue') AS oldValue,
-                        JSON_VALUE(value, '$.newValue') AS newValue,
-                        JSON_VALUE(value, '$.changeType') AS changeType,
-                        JSON_VALUE(value, '$.changedById') AS changedById,
-                        JSON_VALUE(value, '$.changedByEmail') AS changedByEmail,
-                        JSON_VALUE(value, '$.changedOn') AS changedOn
-                    FROM OPENJSON(@NewPhaseChangesJson)
-                ),
-                MergedFields AS (
-                    -- 1) Existing fields NOT touched in this save - preserve everything
-                    SELECT e.field, e.oldValue, e.newValue, e.changeType, e.changedById, e.changedByEmail, e.changedOn
-                    FROM ExistingFields e
-                    WHERE NOT EXISTS (SELECT 1 FROM NewFields n WHERE n.field = e.field)
-                    UNION ALL
-                    -- 2) Brand-new fields (first time this field appears in the log)
-                    SELECT n.field, n.oldValue, n.newValue, n.changeType, n.changedById, n.changedByEmail, n.changedOn
-                    FROM NewFields n
-                    WHERE NOT EXISTS (SELECT 1 FROM ExistingFields e WHERE e.field = n.field)
-                    UNION ALL
-                    -- 3) Re-changed fields: preserve original oldValue, update newValue + metadata
-                    SELECT n.field, e.oldValue, n.newValue,
-                        CASE
-                            WHEN e.oldValue IS NULL AND n.newValue IS NOT NULL THEN 'Added'
-                            WHEN e.oldValue IS NOT NULL AND n.newValue IS NULL THEN 'Removed'
-                            ELSE 'Modified'
-                        END,
-                        n.changedById, n.changedByEmail, n.changedOn
-                    FROM NewFields n
-                    INNER JOIN ExistingFields e ON e.field = n.field
-                ),
-                -- 4) Remove reverted fields (value changed back to original)
-                FilteredFields AS (
-                    SELECT field, oldValue, newValue, changeType, changedById, changedByEmail, changedOn
-                    FROM MergedFields
-                    WHERE NOT (oldValue IS NOT NULL AND newValue IS NOT NULL AND oldValue = newValue)
-                )
-                SELECT @MergedPhaseJson = (
-                    SELECT field, oldValue, newValue, changeType, changedById, changedByEmail, changedOn
-                    FROM FilteredFields
-                    ORDER BY field
-                    FOR JSON PATH
-                );
-
-                IF @MergedPhaseJson IS NULL OR @MergedPhaseJson = '[]'
-                BEGIN
-                    DELETE FROM tip.ProjectAmendmentLog WHERE Id = @PhaseLogId;
-                END
-                ELSE
-                BEGIN
-                    -- Build description with unique user emails
-                    DECLARE @PhaseUsers NVARCHAR(MAX);
-                    WITH AllUsers AS (
-                        SELECT DISTINCT JSON_VALUE(value, '$.changedByEmail') AS email
-                        FROM OPENJSON(@MergedPhaseJson)
-                    )
-                    SELECT @PhaseUsers = STRING_AGG(email, ', ') FROM AllUsers WHERE email IS NOT NULL;
-
-                    UPDATE tip.ProjectAmendmentLog
-                    SET RawChanges = @MergedPhaseJson,
-                        Description = 'Phase changes by: ' + ISNULL(@PhaseUsers, 'Unknown'),
-                        UpdatedById = @UserId,
-                        UpdatedOn = @Now
-                    WHERE Id = @PhaseLogId;
-
-                    INSERT INTO @GeneratedLogIds (LogId) VALUES (@PhaseLogId);
-                END;
-            END
-            ELSE
-            BEGIN
-                -- Create new log record
-                SET @PhaseLogId = NEWID();
-
-                INSERT INTO tip.ProjectAmendmentLog
-                    (Id, ProjectAmendmentId, ProjectAmendmentLogTypeId, Description, RawChanges, CreatedById, CreatedOn)
-                VALUES
-                    (@PhaseLogId, @EffectiveProjectAmendmentId, @PhaseLogTypeId,
-                     'Phase changes by: ' + ISNULL(@UserEmail, 'Unknown'), @NewPhaseChangesJson, @UserId, @Now);
-
-                INSERT INTO @GeneratedLogIds (LogId) VALUES (@PhaseLogId);
-            END;
-        END;
-
-        -- 4b: Handle Administrative Log if administrative changes exist
-        IF @HasAdminChanges = 1
-        BEGIN
-            DECLARE @AdminLogId UNIQUEIDENTIFIER;
-            DECLARE @ExistingAdminJson NVARCHAR(MAX);
-
-            -- Check for existing log record
-            SELECT @AdminLogId = Id, @ExistingAdminJson = RawChanges
-            FROM tip.ProjectAmendmentLog
-            WHERE ProjectAmendmentId = @EffectiveProjectAmendmentId
-              AND ProjectAmendmentLogTypeId = @AdministrativeLogTypeId;
-
-            -- Build JSON for new admin changes
-            DECLARE @NewAdminChangesJson NVARCHAR(MAX);
-            SELECT @NewAdminChangesJson = (
-                SELECT
-                    FieldName AS [field],
-                    COALESCE(OldValueDisplay, OldValue) AS [oldValue],
-                    COALESCE(NewValueDisplay, NewValue) AS [newValue],
-                    CASE
-                        WHEN OldValue IS NULL AND NewValue IS NOT NULL THEN 'Added'
-                        WHEN OldValue IS NOT NULL AND NewValue IS NULL THEN 'Removed'
-                        ELSE 'Modified'
-                    END AS [changeType],
-                    LOWER(CAST(@UserId AS NVARCHAR(36))) AS [changedById],
-                    @UserEmail AS [changedByEmail],
-                    @Now AS [changedOn]
-                FROM @ChangedFields
-                WHERE FieldCategory = 'Administrative'
-                FOR JSON PATH
-            );
-
-            IF @AdminLogId IS NOT NULL
-            BEGIN
-                -- Merge with existing record
-                DECLARE @MergedAdminJson NVARCHAR(MAX);
-
-                WITH ExistingFields AS (
-                    SELECT
-                        JSON_VALUE(value, '$.field') AS field,
-                        JSON_VALUE(value, '$.oldValue') AS oldValue,
-                        JSON_VALUE(value, '$.newValue') AS newValue,
-                        JSON_VALUE(value, '$.changeType') AS changeType,
-                        JSON_VALUE(value, '$.changedById') AS changedById,
-                        JSON_VALUE(value, '$.changedByEmail') AS changedByEmail,
-                        JSON_VALUE(value, '$.changedOn') AS changedOn
-                    FROM OPENJSON(@ExistingAdminJson)
-                ),
-                NewFields AS (
-                    SELECT
-                        JSON_VALUE(value, '$.field') AS field,
-                        JSON_VALUE(value, '$.oldValue') AS oldValue,
-                        JSON_VALUE(value, '$.newValue') AS newValue,
-                        JSON_VALUE(value, '$.changeType') AS changeType,
-                        JSON_VALUE(value, '$.changedById') AS changedById,
-                        JSON_VALUE(value, '$.changedByEmail') AS changedByEmail,
-                        JSON_VALUE(value, '$.changedOn') AS changedOn
-                    FROM OPENJSON(@NewAdminChangesJson)
-                ),
-                MergedFields AS (
-                    -- 1) Existing fields NOT touched in this save - preserve everything
-                    SELECT e.field, e.oldValue, e.newValue, e.changeType, e.changedById, e.changedByEmail, e.changedOn
-                    FROM ExistingFields e
-                    WHERE NOT EXISTS (SELECT 1 FROM NewFields n WHERE n.field = e.field)
-                    UNION ALL
-                    -- 2) Brand-new fields (first time this field appears in the log)
-                    SELECT n.field, n.oldValue, n.newValue, n.changeType, n.changedById, n.changedByEmail, n.changedOn
-                    FROM NewFields n
-                    WHERE NOT EXISTS (SELECT 1 FROM ExistingFields e WHERE e.field = n.field)
-                    UNION ALL
-                    -- 3) Re-changed fields: preserve original oldValue, update newValue + metadata
-                    SELECT n.field, e.oldValue, n.newValue,
-                        CASE
-                            WHEN e.oldValue IS NULL AND n.newValue IS NOT NULL THEN 'Added'
-                            WHEN e.oldValue IS NOT NULL AND n.newValue IS NULL THEN 'Removed'
-                            ELSE 'Modified'
-                        END,
-                        n.changedById, n.changedByEmail, n.changedOn
-                    FROM NewFields n
-                    INNER JOIN ExistingFields e ON e.field = n.field
-                ),
-                -- 4) Remove reverted fields (value changed back to original)
-                FilteredFields AS (
-                    SELECT field, oldValue, newValue, changeType, changedById, changedByEmail, changedOn
-                    FROM MergedFields
-                    WHERE NOT (oldValue IS NOT NULL AND newValue IS NOT NULL AND oldValue = newValue)
-                )
-                SELECT @MergedAdminJson = (
-                    SELECT field, oldValue, newValue, changeType, changedById, changedByEmail, changedOn
-                    FROM FilteredFields
-                    ORDER BY field
-                    FOR JSON PATH
-                );
-
-                IF @MergedAdminJson IS NULL OR @MergedAdminJson = '[]'
-                BEGIN
-                    DELETE FROM tip.ProjectAmendmentLog WHERE Id = @AdminLogId;
-                END
-                ELSE
-                BEGIN
-                    DECLARE @AdminUsers NVARCHAR(MAX);
-                    WITH AllUsers AS (
-                        SELECT DISTINCT JSON_VALUE(value, '$.changedByEmail') AS email
-                        FROM OPENJSON(@MergedAdminJson)
-                    )
-                    SELECT @AdminUsers = STRING_AGG(email, ', ') FROM AllUsers WHERE email IS NOT NULL;
-
-                    UPDATE tip.ProjectAmendmentLog
-                    SET RawChanges = @MergedAdminJson,
-                        Description = 'Administrative changes by: ' + ISNULL(@AdminUsers, 'Unknown'),
-                        UpdatedById = @UserId,
-                        UpdatedOn = @Now
-                    WHERE Id = @AdminLogId;
-
-                    INSERT INTO @GeneratedLogIds (LogId) VALUES (@AdminLogId);
-                END;
-            END
-            ELSE
-            BEGIN
-                SET @AdminLogId = NEWID();
-
-                INSERT INTO tip.ProjectAmendmentLog
-                    (Id, ProjectAmendmentId, ProjectAmendmentLogTypeId, Description, RawChanges, CreatedById, CreatedOn)
-                VALUES
-                    (@AdminLogId, @EffectiveProjectAmendmentId, @AdministrativeLogTypeId,
-                     'Administrative changes by: ' + ISNULL(@UserEmail, 'Unknown'), @NewAdminChangesJson, @UserId, @Now);
-
-                INSERT INTO @GeneratedLogIds (LogId) VALUES (@AdminLogId);
-            END;
-        END;
-
-        -- 4c: Handle Amendment Log if general amendment changes exist
+        -- 4a: Handle Amendment Log — the only category, since Q19 folded Phase and
+        --     Administrative into it at STEP 1c.
         IF @HasAmendmentChanges = 1
         BEGIN
             DECLARE @AmendLogId UNIQUEIDENTIFIER;
@@ -712,14 +501,24 @@ BEGIN
                     FieldName AS [field],
                     COALESCE(OldValueDisplay, OldValue) AS [oldValue],
                     COALESCE(NewValueDisplay, NewValue) AS [newValue],
-                    CASE
-                        WHEN OldValue IS NULL AND NewValue IS NOT NULL THEN 'Added'
-                        WHEN OldValue IS NOT NULL AND NewValue IS NULL THEN 'Removed'
-                        ELSE 'Modified'
-                    END AS [changeType],
+                    -- PSRC-shiu: ChangeKind qualifies the derived type rather than replacing it,
+                    -- so a split reads 'Split - Added' / 'Split - Modified' and the plain forms
+                    -- are untouched for every ordinary change.
+                    CONCAT(
+                        CASE WHEN ChangeKind IS NULL THEN '' ELSE ChangeKind + ' - ' END,
+                        CASE
+                            WHEN OldValue IS NULL AND NewValue IS NOT NULL THEN 'Added'
+                            WHEN OldValue IS NOT NULL AND NewValue IS NULL THEN 'Removed'
+                            ELSE 'Modified'
+                        END
+                    ) AS [changeType],
                     LOWER(CAST(@UserId AS NVARCHAR(36))) AS [changedById],
                     @UserEmail AS [changedByEmail],
-                    @Now AS [changedOn]
+                    @Now AS [changedOn],
+                    -- PSRC-cs0z: null for non-funding changes, and FOR JSON PATH omits nulls,
+                    -- so existing consumers see exactly the shape they saw before.
+                    FundingRowId AS [fundingRowId],
+                    SubFieldName AS [subField]
                 FROM @ChangedFields
                 WHERE FieldCategory = 'Amendment'
                 FOR JSON PATH
@@ -738,7 +537,13 @@ BEGIN
                         JSON_VALUE(value, '$.changeType') AS changeType,
                         JSON_VALUE(value, '$.changedById') AS changedById,
                         JSON_VALUE(value, '$.changedByEmail') AS changedByEmail,
-                        JSON_VALUE(value, '$.changedOn') AS changedOn
+                        JSON_VALUE(value, '$.changedOn') AS changedOn,
+                        JSON_VALUE(value, '$.fundingRowId') AS fundingRowId,
+                        JSON_VALUE(value, '$.subField') AS subField,
+                        -- Match key: two funding rows both carry 'Programmed Funding Amount', so
+                        -- the field name alone would merge them into one (PSRC-cs0z).
+                        CONCAT(ISNULL(JSON_VALUE(value, '$.fundingRowId'), ''), '|',
+                               JSON_VALUE(value, '$.field')) AS matchKey
                     FROM OPENJSON(@ExistingAmendJson)
                 ),
                 NewFields AS (
@@ -749,41 +554,89 @@ BEGIN
                         JSON_VALUE(value, '$.changeType') AS changeType,
                         JSON_VALUE(value, '$.changedById') AS changedById,
                         JSON_VALUE(value, '$.changedByEmail') AS changedByEmail,
-                        JSON_VALUE(value, '$.changedOn') AS changedOn
+                        JSON_VALUE(value, '$.changedOn') AS changedOn,
+                        JSON_VALUE(value, '$.fundingRowId') AS fundingRowId,
+                        JSON_VALUE(value, '$.subField') AS subField,
+                        CONCAT(ISNULL(JSON_VALUE(value, '$.fundingRowId'), ''), '|',
+                               JSON_VALUE(value, '$.field')) AS matchKey
                     FROM OPENJSON(@NewAmendChangesJson)
                 ),
                 MergedFields AS (
                     -- 1) Existing fields NOT touched in this save - preserve everything
-                    SELECT e.field, e.oldValue, e.newValue, e.changeType, e.changedById, e.changedByEmail, e.changedOn
+                    SELECT e.field, e.oldValue, e.newValue, e.changeType, e.changedById, e.changedByEmail, e.changedOn,
+                           e.fundingRowId, e.subField
                     FROM ExistingFields e
-                    WHERE NOT EXISTS (SELECT 1 FROM NewFields n WHERE n.field = e.field)
+                    WHERE NOT EXISTS (SELECT 1 FROM NewFields n WHERE n.matchKey = e.matchKey)
                     UNION ALL
                     -- 2) Brand-new fields (first time this field appears in the log)
-                    SELECT n.field, n.oldValue, n.newValue, n.changeType, n.changedById, n.changedByEmail, n.changedOn
+                    SELECT n.field, n.oldValue, n.newValue, n.changeType, n.changedById, n.changedByEmail, n.changedOn,
+                           n.fundingRowId, n.subField
                     FROM NewFields n
-                    WHERE NOT EXISTS (SELECT 1 FROM ExistingFields e WHERE e.field = n.field)
+                    WHERE NOT EXISTS (SELECT 1 FROM ExistingFields e WHERE e.matchKey = n.matchKey)
                     UNION ALL
                     -- 3) Re-changed fields: preserve original oldValue, update newValue + metadata
                     SELECT n.field, e.oldValue, n.newValue,
-                        CASE
-                            WHEN e.oldValue IS NULL AND n.newValue IS NOT NULL THEN 'Added'
-                            WHEN e.oldValue IS NOT NULL AND n.newValue IS NULL THEN 'Removed'
-                            ELSE 'Modified'
-                        END,
-                        n.changedById, n.changedByEmail, n.changedOn
+                        -- Recomputed against the ORIGINAL old value, so keep whatever qualifier
+                        -- the incoming change carried (PSRC-shiu) rather than dropping back to the
+                        -- bare form on a second save.
+                        CONCAT(
+                            CASE WHEN CHARINDEX(' - ', n.changeType) = 0 THEN ''
+                                 ELSE LEFT(n.changeType, CHARINDEX(' - ', n.changeType) + 2) END,
+                            CASE
+                                WHEN e.oldValue IS NULL AND n.newValue IS NOT NULL THEN 'Added'
+                                WHEN e.oldValue IS NOT NULL AND n.newValue IS NULL THEN 'Removed'
+                                ELSE 'Modified'
+                            END
+                        ),
+                        n.changedById, n.changedByEmail, n.changedOn,
+                        n.fundingRowId, n.subField
                     FROM NewFields n
-                    INNER JOIN ExistingFields e ON e.field = n.field
+                    INNER JOIN ExistingFields e ON e.matchKey = n.matchKey
                 ),
-                -- 4) Remove reverted fields (value changed back to original)
-                FilteredFields AS (
-                    SELECT field, oldValue, newValue, changeType, changedById, changedByEmail, changedOn
+                -- 4) Remove reverted entries.
+                --    For a plain field that still means "value changed back to original".
+                --    For a funding row it has to be judged per ROW, not per subfield: PSRC-cs0z
+                --    keeps unchanged subfields deliberately, as the context the block renders on
+                --    both sides, so dropping them individually would empty the block. A funding
+                --    row disappears only when EVERY one of its subfields has come back to where
+                --    it started — which is the same "fully reverted" rule, applied at row level.
+                RevertedFundingRows AS (
+                    SELECT fundingRowId
                     FROM MergedFields
-                    WHERE NOT (oldValue IS NOT NULL AND newValue IS NOT NULL AND oldValue = newValue)
+                    WHERE fundingRowId IS NOT NULL
+                    GROUP BY fundingRowId
+                    -- Null-safe on purpose. A row ADDED and then REMOVED inside the same
+                    -- amendment leaves every subfield at NULL -> NULL, which the old
+                    -- "both sides NOT NULL" test scored as a change and kept — leaving a log entry
+                    -- with no values in it at all (Asana TIP-005). Blank is blank, matching
+                    -- AuditLogService.NormaliseBlank on the way in.
+                    HAVING SUM(CASE
+                                   WHEN ISNULL(oldValue, '') = ISNULL(newValue, '')
+                                       THEN 0
+                                   ELSE 1
+                               END) = 0
+                ),
+                FilteredFields AS (
+                    SELECT field, oldValue, newValue, changeType, changedById, changedByEmail, changedOn,
+                           fundingRowId, subField
+                    FROM MergedFields m
+                    WHERE (
+                            m.fundingRowId IS NULL
+                            -- Null-safe for the same reason as RevertedFundingRows above: a plain
+                            -- field that ends where it started is reverted whether that value is
+                            -- blank or not.
+                            AND NOT (ISNULL(m.oldValue, '') = ISNULL(m.newValue, ''))
+                          )
+                       OR (
+                            m.fundingRowId IS NOT NULL
+                            AND NOT EXISTS (SELECT 1 FROM RevertedFundingRows r WHERE r.fundingRowId = m.fundingRowId)
+                          )
                 )
                 SELECT @MergedAmendJson = (
-                    SELECT field, oldValue, newValue, changeType, changedById, changedByEmail, changedOn
+                    SELECT field, oldValue, newValue, changeType, changedById, changedByEmail, changedOn,
+                           fundingRowId, subField
                     FROM FilteredFields
-                    ORDER BY field
+                    ORDER BY ISNULL(fundingRowId, ''), field
                     FOR JSON PATH
                 );
 
@@ -838,5 +691,6 @@ BEGIN
         THROW;
     END CATCH;
 END;
+
 
 GO

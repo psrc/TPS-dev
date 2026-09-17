@@ -5,6 +5,7 @@ CREATE TYPE [dbo].[ProjectFieldChangeType] AS TABLE
 [NewValue] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 [OldValueDisplay] [nvarchar] (500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 [NewValueDisplay] [nvarchar] (500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-[FieldCategory] [nvarchar] (50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL
+[FieldCategory] [nvarchar] (50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+[ChangeKind] [nvarchar] (20) COLLATE SQL_Latin1_General_CP1_CI_AS NULL
 )
 GO

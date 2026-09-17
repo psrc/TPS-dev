@@ -2,13 +2,15 @@ SET QUOTED_IDENTIFIER ON
 GO
 SET ANSI_NULLS ON
 GO
-
 -- =============================================
 -- Author:      john.hunter@triskelle.solutions
 -- Create Date: 2025-07-24
 -- Modified:    2025-12-18
 -- Modified:    2026-02-20 - Include inactive ProgrammedFunding records and remap OriginRecordId chain
 -- Modified:    2026-04-28 - Copy Project.ReportDescription into Project_Pending.ReportDescription on amendment create
+-- Modified:    2026-09-07 - Stamp IsAmendmentAddition = 0 on copied ProgrammedFunding rows (PSRC-gj2o)
+-- Modified:    2026-09-10 - Carry LineageId so a funding row keeps one identity across amendments (PSRC-yh7o)
+-- Modified:    2026-09-12 - PSRC-mte.1 tenancy scoping (@TenantAgencyId/@BypassTenancy)
 -- Description: Creates a new project amendment record linking a project to an amendment
 --              and copies the source project data into pending tables for modification.
 --              Also auto-creates review area records for all active review area types.
@@ -28,10 +30,16 @@ CREATE PROCEDURE [dbo].[pr_tip_project_amendment_create]
   , @AmendmentId            UNIQUEIDENTIFIER -- ID of the amendment being applied to the project
   , @ProjectId              UNIQUEIDENTIFIER -- ID of the project being amended
   , @AmendmentSectionTypeId UNIQUEIDENTIFIER -- ID of the amendment section type (category/area of amendment)
+  , @TenantAgencyId         UNIQUEIDENTIFIER = NULL -- PSRC-mte.1: caller's agency (NULL = none)
+  , @BypassTenancy          BIT              = 0    -- PSRC-mte.1: 1 = internal caller, no scoping
 AS
 BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
+
+    -- PSRC-mte.1: a scoped caller may only touch a project in their own agency.
+    IF @BypassTenancy = 0 AND NOT EXISTS (SELECT 1 FROM tip.Project WHERE Id = @ProjectId AND AgencyId = @TenantAgencyId)
+        THROW 50403, 'Tenancy: project is not in the caller''s agency.', 1;
 
     -- Generate new unique identifiers
     DECLARE @ProjectAmendmentId UNIQUEIDENTIFIER = NEWID();
@@ -250,7 +258,9 @@ BEGIN
             , FhwaObligatedDate
             , FhwaObligatedNumber
             , OriginRecordId
+            , LineageId
             , IsActive
+            , IsAmendmentAddition
             , CreatedById
             , CreatedOn)
         SELECT
@@ -271,7 +281,11 @@ BEGIN
                 WHEN pf.OriginRecordId = pf.Id THEN m.NewId        -- Origin: self-reference with new Id
                 ELSE ISNULL(om.NewId, m.NewId)                      -- Non-origin: point to origin's new Id
               END
+            -- PSRC-yh7o: carried through UNCHANGED, which is the whole point — this is the identity
+            -- that survives the re-keying above. COALESCE covers rows predating the column.
+            , COALESCE(pf.LineageId, pf.OriginRecordId)
             , pf.IsActive
+            , 0             -- Carried over from the posted project, so not removable in this amendment
             , @UserId
             , pf.CreatedOn  -- Preserve original creation time for version ordering
         FROM tip.ProgrammedFunding AS pf
@@ -316,4 +330,6 @@ BEGIN
         THROW;
     END CATCH;
 END;
+
+
 GO

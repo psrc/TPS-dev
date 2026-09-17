@@ -10,10 +10,13 @@ CREATE TABLE [forms].[FormField]
 [IsRequired] [bit] NOT NULL CONSTRAINT [DF_FormField_IsRequired] DEFAULT ((0)),
 [SortOrder] [int] NOT NULL CONSTRAINT [DF_FormField_SortOrder] DEFAULT ((0)),
 [SettingsJson] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_FormField_CreatedById] DEFAULT (user_name()),
+[CreatedById] [uniqueidentifier] NOT NULL,
 [CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_FormField_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
-[UpdatedOn] [datetime2] NULL
+[UpdatedOn] [datetime2] NULL,
+[IncludeOnPrint] [bit] NOT NULL CONSTRAINT [DF_FormField_IncludeOnPrint] DEFAULT ((1)),
+[IsRetired] [bit] NOT NULL CONSTRAINT [DF_FormField_IsRetired] DEFAULT ((0)),
+[RequiresReview] [bit] NOT NULL CONSTRAINT [DF_FormField_RequiresReview] DEFAULT ((0))
 ) ON [PRIMARY]
 GO
 ALTER TABLE [forms].[FormField] ADD CONSTRAINT [PK_FormField] PRIMARY KEY CLUSTERED ([Id]) ON [PRIMARY]

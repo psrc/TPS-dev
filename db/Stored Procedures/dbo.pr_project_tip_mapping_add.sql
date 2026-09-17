@@ -32,15 +32,22 @@ Business Rules:
     - Returns 0 if all projects were already mapped
 ==================================================
 */
+-- Modified:    2026-09-12 - PSRC-mte.1 tenancy scoping (@TenantAgencyId/@BypassTenancy)
 CREATE PROCEDURE [dbo].[pr_project_tip_mapping_add]
 (
     @UserId     UNIQUEIDENTIFIER                   -- User performing the operation
   , @TipId      UNIQUEIDENTIFIER                   -- TIP to add projects to
   , @ProjectIds UniqueIdentifierArrayType READONLY -- Projects to add
+  , @TenantAgencyId UNIQUEIDENTIFIER = NULL -- PSRC-mte.1: caller's agency (NULL = none)
+  , @BypassTenancy  BIT              = 0    -- PSRC-mte.1: 1 = internal caller, no scoping
 )
 AS
 BEGIN
     SET NOCOUNT ON;
+    -- PSRC-mte.1: internal-only. This object has no owning agency, so a scoped caller has no
+    -- rows here at all; refusing beats guessing.
+    IF @BypassTenancy = 0
+        THROW 50403, 'Tenancy: pr_project_tip_mapping_add is internal-only.', 1;
 
     DECLARE @AddedCount INT = 0;
     DECLARE @LogTypeId UNIQUEIDENTIFIER;
@@ -113,4 +120,6 @@ BEGIN
     -- Return count of projects added
     SELECT AddedCount = @AddedCount;
 END;
+
+
 GO

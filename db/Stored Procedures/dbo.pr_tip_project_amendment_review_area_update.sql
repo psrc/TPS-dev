@@ -14,8 +14,9 @@ GO
 --   2026-02-19  Auto-calculate ProjectAmendment.ProjectAmendmentReviewStatusTypeId
 --               after each review area update. Logic: all OK → complete,
 --               any issue → issues, otherwise → incomplete.
+-- Modified:    2026-09-12 - PSRC-mte.1 tenancy scoping (@TenantAgencyId/@BypassTenancy)
 -- =============================================
-CREATE   PROCEDURE [dbo].[pr_tip_project_amendment_review_area_update]
+CREATE PROCEDURE [dbo].[pr_tip_project_amendment_review_area_update]
     @UserId            UNIQUEIDENTIFIER -- User performing the update (for audit trail)
   , @AmendmentId       UNIQUEIDENTIFIER -- Amendment containing the project
   , @ProjectAmendmentId UNIQUEIDENTIFIER -- ProjectAmendment record ID
@@ -23,10 +24,17 @@ CREATE   PROCEDURE [dbo].[pr_tip_project_amendment_review_area_update]
   , @StatusTypeId      UNIQUEIDENTIFIER -- New status type for the review area
   , @ReviewerComments  NVARCHAR(MAX) = NULL -- Reviewer's comments (HTML content)
   , @FollowUpComments  NVARCHAR(MAX) = NULL -- Follow-up comments (HTML content)
+  , @TenantAgencyId UNIQUEIDENTIFIER = NULL -- PSRC-mte.1: caller's agency (NULL = none)
+  , @BypassTenancy  BIT              = 0    -- PSRC-mte.1: 1 = internal caller, no scoping
 AS
 BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
+
+    -- PSRC-mte.1: internal-only. This object has no owning agency, so a scoped caller has no
+    -- rows here at all; refusing beats guessing.
+    IF @BypassTenancy = 0
+        THROW 50403, 'Tenancy: pr_tip_project_amendment_review_area_update is internal-only.', 1;
 
     -- =============================================
     -- VALIDATE AMENDMENT STATUS
@@ -163,4 +171,6 @@ BEGIN
         THROW;
     END CATCH;
 END;
+
+
 GO

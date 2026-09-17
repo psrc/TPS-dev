@@ -6,7 +6,7 @@ CREATE TABLE [forms].[FormTemplateStatusType]
 [SortId] [int] NULL,
 [EffectiveDate] [date] NULL,
 [EndDate] [date] NULL,
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_FormTemplateStatusType_CreatedById] DEFAULT (user_name()),
+[CreatedById] [uniqueidentifier] NOT NULL,
 [CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_FormTemplateStatusType_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
 [UpdatedOn] [datetime2] NULL

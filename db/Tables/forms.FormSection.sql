@@ -6,10 +6,11 @@ CREATE TABLE [forms].[FormSection]
 [Title] [nvarchar] (200) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 [Description] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 [SortOrder] [int] NOT NULL CONSTRAINT [DF_FormSection_SortOrder] DEFAULT ((0)),
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_FormSection_CreatedById] DEFAULT (user_name()),
+[CreatedById] [uniqueidentifier] NOT NULL,
 [CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_FormSection_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
-[UpdatedOn] [datetime2] NULL
+[UpdatedOn] [datetime2] NULL,
+[IncludeOnPrint] [bit] NOT NULL CONSTRAINT [DF_FormSection_IncludeOnPrint] DEFAULT ((1))
 ) ON [PRIMARY]
 GO
 ALTER TABLE [forms].[FormSection] ADD CONSTRAINT [PK_FormSection] PRIMARY KEY CLUSTERED ([Id]) ON [PRIMARY]

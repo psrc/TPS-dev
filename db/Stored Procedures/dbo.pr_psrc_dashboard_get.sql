@@ -30,12 +30,19 @@ CREATED: 2025-07-03
 MODIFIED: 7/3/2025 - Added comprehensive comments and cleaned formatting
 ================================================================================
 */
+-- Modified:    2026-09-12 - PSRC-mte.1 tenancy scoping (@TenantAgencyId/@BypassTenancy)
 CREATE PROCEDURE [dbo].[pr_psrc_dashboard_get]
 (
     @UserId UNIQUEIDENTIFIER
+  , @TenantAgencyId UNIQUEIDENTIFIER = NULL -- PSRC-mte.1: caller's agency (NULL = none)
+  , @BypassTenancy  BIT              = 0    -- PSRC-mte.1: 1 = internal caller, no scoping
 ) AS
 BEGIN
     SET NOCOUNT ON;
+    -- PSRC-mte.1: internal-only. This object has no owning agency, so a scoped caller has no
+    -- rows here at all; refusing beats guessing.
+    IF @BypassTenancy = 0
+        THROW 50403, 'Tenancy: pr_psrc_dashboard_get is internal-only.', 1;
 
     /*
     ============================================================================
@@ -462,4 +469,6 @@ BEGIN
         ORDER BY a.SortId;
 
 END;
+
+
 GO

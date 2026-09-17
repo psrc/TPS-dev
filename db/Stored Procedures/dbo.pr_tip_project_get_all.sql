@@ -6,6 +6,7 @@ GO
 /*************************************************************************************************
 -- =============================================
 -- Author:        john.hunter@triskelle.solutions
+-- Modified:      2026-09-12 - PSRC-mte.1 tenancy scoping (@TenantAgencyId/@BypassTenancy)
 -- Create date:   2025-07-23
 -- Description:   Retrieves all TIP (Transportation Improvement Program) projects from the system
 --                with comprehensive project details including location, funding, and status information.
@@ -26,9 +27,11 @@ GO
 -- [Date]       [Author]            Initial creation
 -- =============================================
 *************************************************************************************************/
-CREATE   PROCEDURE [dbo].[pr_tip_project_get_all]
+CREATE PROCEDURE [dbo].[pr_tip_project_get_all]
     @UserId     UNIQUEIDENTIFIER -- User identifier passed for potential future security/filtering needs
   , @SearchTerm NVARCHAR(200)    -- Optional search term used to filter results on ProjectCode, Name, Agency
+  , @TenantAgencyId UNIQUEIDENTIFIER = NULL -- PSRC-mte.1: caller's agency (NULL = none)
+  , @BypassTenancy  BIT              = 0    -- PSRC-mte.1: 1 = internal caller, no scoping
 AS
     BEGIN
         SET NOCOUNT ON; -- Suppress row count messages to improve performance and reduce network traffic
@@ -90,11 +93,16 @@ AS
             LEFT JOIN common.Agency AS agy
                       ON agy.Id = project.AgencyId
         WHERE
-            ISNULL(@SearchTerm, '') = ''
-            OR project.ProjectCode LIKE '%' + @SearchTerm + '%'
-            OR project.Title LIKE '%' + @SearchTerm + '%'
-            OR agy.Name LIKE '%' + @SearchTerm + '%'
+            (@BypassTenancy = 1 OR project.AgencyId = @TenantAgencyId) -- PSRC-mte.1
+            AND (
+                ISNULL(@SearchTerm, '') = ''
+                OR project.ProjectCode LIKE '%' + @SearchTerm + '%'
+                OR project.Title LIKE '%' + @SearchTerm + '%'
+                OR agy.Name LIKE '%' + @SearchTerm + '%'
+            )
         ORDER BY
             project.ProjectCode;
     END;
+
+
 GO

@@ -2,7 +2,6 @@ SET QUOTED_IDENTIFIER ON
 GO
 SET ANSI_NULLS ON
 GO
-
 -- =============================================
 -- Author:      john.hunter@triskelle.solutions
 -- Create date: 2025-07-23
@@ -15,12 +14,26 @@ GO
 --               description, years, IsCurrent) for project TIP list dialog.
 --   2026-04-28  Added ReportDescription to project select and Reporting tab fields
 --               (ReportDescription + 4 flags) to amendment select.
+--   2026-09-07  PSRC-r2j5 - added IsPending to the Section 6 TIP details so the
+--               project TIP list dialog can distinguish the TIP being programmed
+--               next from the one currently in effect.
+--   2026-09-10  PSRC-lqwf - Section 5 returns ProjectPendingId (the project's id inside
+--               each amendment) so the warning banner can link straight to it.
+--   2026-09-10  PSRC-a8e5 - Returns each funding row's LineageId, and Section 7 maps every
+--               audit-log fundingRowId to a lineage for the per-row history viewer.
+-- Modified:    2026-09-12 - PSRC-mte.1 tenancy scoping (@TenantAgencyId/@BypassTenancy)
 -- =============================================
 CREATE PROCEDURE [dbo].[pr_tip_project_get]
     @UserId          UNIQUEIDENTIFIER
-        , @ProjectId UNIQUEIDENTIFIER AS
+        , @ProjectId UNIQUEIDENTIFIER
+        , @TenantAgencyId UNIQUEIDENTIFIER = NULL -- PSRC-mte.1: caller's agency (NULL = none)
+        , @BypassTenancy  BIT              = 0    -- PSRC-mte.1: 1 = internal caller, no scoping
+AS
 BEGIN
     SET NOCOUNT ON;
+    -- PSRC-mte.1: a scoped caller may only touch a project in their own agency.
+    IF @BypassTenancy = 0 AND NOT EXISTS (SELECT 1 FROM tip.Project WHERE Id = @ProjectId AND AgencyId = @TenantAgencyId)
+        THROW 50403, 'Tenancy: project is not in the caller''s agency.', 1;
 
     -- =============================================
     -- SECTION 1: Core Project Information
@@ -192,6 +205,7 @@ BEGIN
       , FhwaObligatedDate       = pf.FhwaObligatedDate
       , FhwaObligatedNumber     = pf.FhwaObligatedNumber
       , OriginRecordId          = pf.OriginRecordId
+      , LineageId               = pf.LineageId
       , IsActive                = pf.IsActive
       , CreatedById             = pf.CreatedById
       , CreatedOn               = pf.CreatedOn
@@ -226,8 +240,13 @@ BEGIN
       , CreatedOn                          = pa.CreatedOn
       , UpdatedById                        = pa.UpdatedById
       , UpdatedOn                          = pa.UpdatedOn
+        -- PSRC-lqwf: each amendment holds its own Project_Pending row (1:1 with ProjectAmendment),
+        -- and that id is what the amendment's route needs to open this project directly.
+      , ProjectPendingId                   = pp.Id
     FROM
         tip.ProjectAmendment AS pa
+        LEFT JOIN tip.Project_Pending AS pp
+               ON pp.ProjectAmendmentId = pa.Id
     WHERE
         pa.ProjectId = @ProjectId;
 
@@ -293,6 +312,7 @@ BEGIN
       , BeginYear   = t.BeginYear
       , EndYear     = t.EndYear
       , IsCurrent   = t.IsCurrent
+      , IsPending   = t.IsPending
     FROM
         tip.ProjectTipMapping AS ptm
         INNER JOIN tip.Tip AS t ON ptm.TipId = t.Id
@@ -300,5 +320,43 @@ BEGIN
         ptm.ProjectId = @ProjectId
     ORDER BY
         t.BeginYear DESC;
+
+    -- =============================================
+    -- SECTION 7: Funding-row lineage map (PSRC-a8e5)
+    -- =============================================
+    -- Audit logs key a funding change by fundingRowId, which is the row's OriginRecordId (or its
+    -- own Id for a split half) AS IT WAS in that amendment - and every amendment re-keys origins.
+    -- This maps each key back to the row's LineageId (PSRC-yh7o), so the client can follow one
+    -- funding row through every amendment's log. Keys are lower-case to match
+    -- AuditLogService.FundingRowKey. AmendmentId NULL = a posted row, the fallback for edits made
+    -- to the posted project directly (logged under an Admin- amendment with no pending rows).
+    SELECT DISTINCT
+        AmendmentId  = pa.AmendmentId
+      , FundingRowId = LOWER(CAST(k.RowKey AS NVARCHAR(36)))
+      , LineageId    = pf.LineageId
+    FROM
+        tip.ProjectAmendment AS pa
+        INNER JOIN tip.Project_Pending AS pp
+                ON pp.ProjectAmendmentId = pa.Id
+        INNER JOIN tip.ProgrammedFunding_Pending AS pf
+                ON pf.Project_PendingId = pp.Id
+        CROSS APPLY (VALUES (pf.Id), (pf.OriginRecordId)) AS k (RowKey)
+    WHERE
+            pa.ProjectId  = @ProjectId
+        AND pf.LineageId IS NOT NULL
+    UNION
+    SELECT
+        AmendmentId  = NULL
+      , FundingRowId = LOWER(CAST(k.RowKey AS NVARCHAR(36)))
+      , LineageId    = pf.LineageId
+    FROM
+        tip.ProgrammedFunding AS pf
+        CROSS APPLY (VALUES (pf.Id), (pf.OriginRecordId)) AS k (RowKey)
+    WHERE
+            pf.ProjectId  = @ProjectId
+        AND pf.LineageId IS NOT NULL;
+
 END;
+
+
 GO

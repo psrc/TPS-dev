@@ -2,12 +2,14 @@ SET QUOTED_IDENTIFIER ON
 GO
 SET ANSI_NULLS ON
 GO
-
 -- =============================================
 -- Author:      john.hunter@triskelle.solutions
 -- Create date: 2025-12-17
 -- Modified:    2026-02-20 - Preserve existing month/day for DateCompProject when only year changes
 -- Modified:    2026-04-28 - Added Reporting tab fields (project ReportDescription, amendment ReportDescription, 4 report flags)
+-- Modified:    2026-09-07 - Carry IsAmendmentAddition through edits; stamp 1 on rows added in the amendment (PSRC-gj2o)
+-- Modified:    2026-09-10 - Carry LineageId so a funding row keeps one identity across amendments (PSRC-yh7o)
+-- Modified:    2026-09-12 - PSRC-mte.1 tenancy scoping (@TenantAgencyId/@BypassTenancy)
 -- Description: Updates a pending project within a TIP amendment with all related data
 --              including secondary improvement types, county mappings, budget, and programmed funding.
 --              Validates that the amendment is not posted before allowing updates.
@@ -69,10 +71,20 @@ CREATE PROCEDURE [dbo].[pr_tip_project_amendment_pending_update]
 ,   @CountyIds                   UniqueIdentifierArrayType READONLY -- Counties where project is located
 ,   @ProgrammedFunds             ProgrammedFundsArrayType READONLY -- Funding information
 ,   @Budget                      ProjectBudgetArrayType READONLY -- Budget information
+,   @TenantAgencyId              UNIQUEIDENTIFIER = NULL -- PSRC-mte.1: caller's agency (NULL = none)
+,   @BypassTenancy               BIT              = 0    -- PSRC-mte.1: 1 = internal caller, no scoping
 ) AS
 BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
+
+    -- PSRC-mte.1: a scoped caller may only touch a pending project in their own agency.
+    IF @BypassTenancy = 0 AND NOT EXISTS (SELECT 1 FROM tip.Project_Pending WHERE Id = @ProjectPendingId AND AgencyId = @TenantAgencyId)
+        THROW 50403, 'Tenancy: pending project is not in the caller''s agency.', 1;
+
+    -- PSRC-mte.1: a scoped caller may only name their own agency.
+    IF @BypassTenancy = 0 AND (@TenantAgencyId IS NULL OR @AgencyId IS NULL OR @AgencyId <> @TenantAgencyId)
+        THROW 50403, 'Tenancy: agency is not the caller''s agency.', 1;
 
     -- =============================================
     -- VALIDATE AMENDMENT STATUS
@@ -233,9 +245,11 @@ BEGIN
             -- Step 3: Insert updated versions of existing records
             ;WITH ExistingInactiveRecords AS (
                 SELECT
-                    ExistingId       = existing.Id
-                  , IncomingId       = incoming.Id
-                  , ExistingOriginId = existing.OriginRecordId
+                    ExistingId         = existing.Id
+                  , IncomingId         = incoming.Id
+                  , ExistingOriginId   = existing.OriginRecordId
+                  , ExistingLineageId  = existing.LineageId
+                  , ExistingIsAddition = existing.IsAmendmentAddition
                 FROM
                     tip.ProgrammedFunding_Pending existing
                     INNER JOIN @ProgrammedFunds incoming ON existing.Id = incoming.Id
@@ -247,6 +261,7 @@ BEGIN
                 ( Id
                 , Project_PendingId
                 , OriginRecordId
+                , LineageId
                 , AwardReferenceId
                 , PhaseTypeId
                 , ProgrammedFundingYear
@@ -259,12 +274,16 @@ BEGIN
                 , FhwaObligatedDate
                 , FhwaObligatedNumber
                 , IsActive
+                , IsAmendmentAddition
                 , CreatedById
                 , CreatedOn)
             SELECT
                 Id                      = NEWID()
               , Project_PendingId       = @ProjectPendingId
               , OriginRecordId          = COALESCE(er.ExistingOriginId, er.ExistingId)
+                -- PSRC-yh7o: an edit supersedes the row but it is the same logical row, so it keeps
+                -- its lineage. COALESCE falls back for rows written before the column existed.
+              , LineageId               = COALESCE(er.ExistingLineageId, er.ExistingOriginId, er.ExistingId)
               , AwardReferenceId        = pf.AwardReferenceId
               , PhaseTypeId             = pf.PhaseTypeId
               , ProgrammedFundingYear   = pf.ProgrammedFundingYear
@@ -277,6 +296,8 @@ BEGIN
               , FhwaObligatedDate       = pf.FhwaObligatedDate
               , FhwaObligatedNumber     = pf.FhwaObligatedNumber
               , IsActive                = 1
+              -- Whether the logical row was added in this amendment survives every edit to it.
+              , IsAmendmentAddition     = er.ExistingIsAddition
               , CreatedById             = @UserId
               , CreatedOn               = GETUTCDATE()
             FROM
@@ -290,6 +311,7 @@ BEGIN
                 ( Id
                 , Project_PendingId
                 , OriginRecordId
+                , LineageId
                 , AwardReferenceId
                 , PhaseTypeId
                 , ProgrammedFundingYear
@@ -302,12 +324,25 @@ BEGIN
                 , FhwaObligatedDate
                 , FhwaObligatedNumber
                 , IsActive
+                , IsAmendmentAddition
                 , CreatedById
                 , CreatedOn)
             SELECT
                 Id                      = pf.Id
               , Project_PendingId       = @ProjectPendingId
               , OriginRecordId          = pf.OriginRecordId
+                -- PSRC-yh7o: a row that is its own origin is genuinely new and starts a lineage.
+                -- A split's new half arrives pointing at the row it split from (PSRC-664l), so it
+                -- JOINS that row's lineage rather than starting one — the two halves are one
+                -- lineage that happened to branch, which is what the Split labelling already says.
+              , LineageId               = CASE
+                                              WHEN pf.OriginRecordId = pf.Id THEN pf.Id
+                                              ELSE COALESCE(
+                                                     (SELECT TOP (1) src.LineageId
+                                                      FROM tip.ProgrammedFunding_Pending src
+                                                      WHERE src.Id = pf.OriginRecordId),
+                                                     pf.OriginRecordId)
+                                          END
               , AwardReferenceId        = pf.AwardReferenceId
               , PhaseTypeId             = pf.PhaseTypeId
               , ProgrammedFundingYear   = pf.ProgrammedFundingYear
@@ -320,6 +355,8 @@ BEGIN
               , FhwaObligatedDate       = pf.FhwaObligatedDate
               , FhwaObligatedNumber     = pf.FhwaObligatedNumber
               , IsActive                = 1
+              -- Added inside this amendment, so it may be removed outright rather than archived.
+              , IsAmendmentAddition     = 1
               , CreatedById             = @UserId
               , CreatedOn               = GETUTCDATE()
             FROM
@@ -403,4 +440,6 @@ BEGIN
         THROW;
     END CATCH;
 END;
+
+
 GO

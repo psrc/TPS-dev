@@ -13,6 +13,7 @@ Purpose: Retrieves paginated TIP project data with search, filtering, and single
 Author: john.hunter@triskelle.solutions
 Created: 2025-06-15
 Modified:
+-- Modified:    2026-09-12 - PSRC-mte.1 tenancy scoping (@TenantAgencyId/@BypassTenancy)
     - 2025-07-28: Updated @Search fields
     - 2025-07-28: Refactored to use ROW_NUMBER() for efficient pagination and align with amendment search pattern
     - 2025-07-29: Refactored to use CROSS APPLY instead of inner joins for aggregations
@@ -62,6 +63,8 @@ CREATE PROCEDURE [dbo].[pr_tip_project_search_view_find]
   , @ProgramYears     IntArrayType              READONLY -- Program year filters
   , @FundingSourceIds UniqueIdentifierArrayType READONLY -- Funding source filters
   , @AgencyIds        UniqueIdentifierArrayType READONLY -- Agency filters
+  , @TenantAgencyId    UNIQUEIDENTIFIER = NULL -- PSRC-mte.1: caller's agency (NULL = none)
+  , @BypassTenancy     BIT              = 0    -- PSRC-mte.1: 1 = internal caller, no scoping
 )
 AS
     BEGIN
@@ -352,7 +355,9 @@ AS
                    OR proj.AgencyId IN (
                                            SELECT a.Value FROM @AgencyIds a
                                        )
-               ))
+               )
+               AND (@BypassTenancy = 1 OR proj.AgencyId = @TenantAgencyId) -- PSRC-mte.1
+          )
         -- Select only the requested page of results
         INSERT @results
             (RowNum
@@ -509,8 +514,11 @@ AS
                     OR proj.AgencyId IN (
                                             SELECT a.Value FROM @AgencyIds a
                                         )
-                );
+                )
+            AND (@BypassTenancy = 1 OR proj.AgencyId = @TenantAgencyId); -- PSRC-mte.1
 
 
     END;
+
+
 GO

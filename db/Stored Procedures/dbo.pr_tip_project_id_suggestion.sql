@@ -6,6 +6,7 @@ GO
 -- Author:      john.hunter@triskelle.solutions
 -- Create date: 2026-02-06
 -- Modified:    2026-05-13 - Treat empty/whitespace ProjectNamePrefix as missing (return blank)
+-- Modified:    2026-09-12 - PSRC-mte.1 tenancy scoping (@TenantAgencyId/@BypassTenancy)
 -- Description: Generates a suggested project ID for a new project
 --              based on agency prefix and project sequence.
 --              Format: [AgencyPrefix]-[#]
@@ -18,9 +19,14 @@ CREATE PROCEDURE [dbo].[pr_tip_project_id_suggestion]
 (
     @UserId   UNIQUEIDENTIFIER
 ,   @AgencyId UNIQUEIDENTIFIER
+,   @TenantAgencyId UNIQUEIDENTIFIER = NULL -- PSRC-mte.1: caller's agency (NULL = none)
+,   @BypassTenancy  BIT              = 0    -- PSRC-mte.1: 1 = internal caller, no scoping
 ) AS
 BEGIN
     SET NOCOUNT ON;
+    -- PSRC-mte.1: a scoped caller may only name their own agency.
+    IF @BypassTenancy = 0 AND (@TenantAgencyId IS NULL OR @AgencyId IS NULL OR @AgencyId <> @TenantAgencyId)
+        THROW 50403, 'Tenancy: agency is not the caller''s agency.', 1;
 
     -- Variable declarations
     DECLARE @AgencyNamePrefix NVARCHAR(60);
@@ -59,4 +65,6 @@ BEGIN
 
     RETURN 0;
 END;
+
+
 GO

@@ -3,7 +3,7 @@ CREATE TABLE [tip].[ProjectCountyMapping]
 [Id] [uniqueidentifier] NOT NULL,
 [ProjectId] [uniqueidentifier] NOT NULL,
 [CountyId] [uniqueidentifier] NOT NULL,
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_ProjectCountyMapping_CreatedById] DEFAULT (user_name()),
+[CreatedById] [uniqueidentifier] NOT NULL,
 [CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_ProjectCountyMapping_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
 [UpdatedOn] [datetime2] NULL

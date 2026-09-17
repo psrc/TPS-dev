@@ -2,12 +2,12 @@ SET QUOTED_IDENTIFIER ON
 GO
 SET ANSI_NULLS ON
 GO
-
 -- =============================================
 -- Author: john.hunter@triskelle.solutions
 -- Create date: 2025-07-02
 -- Modified:    2026-02-20 - Preserve existing month/day for DateCompProject when only year changes
 -- Modified:    2026-04-28 - Added @ReportDescription parameter to persist Reporting tab project-level description
+-- Modified:    2026-09-12 - PSRC-mte.1 tenancy scoping (@TenantAgencyId/@BypassTenancy)
 -- Description: Updates a subset of a TIP (Transportation Improvement Program) project with all related data
 --              including secondary improvement types, county mappings, and programmed funding.
 --              Implements versioning for programmed funding records to maintain audit trail.
@@ -59,10 +59,19 @@ CREATE PROCEDURE [dbo].[pr_tip_project_update]
 ,   @CountyIds                   UniqueIdentifierArrayType READONLY -- Counties where project is located
 ,   @ProgrammedFunds             ProgrammedFundsArrayType READONLY -- Funding information with versioning
 ,   @Budget                      ProjectBudgetArrayType READONLY -- Budget information
+,   @TenantAgencyId               UNIQUEIDENTIFIER = NULL -- PSRC-mte.1: caller's agency (NULL = none)
+,   @BypassTenancy                BIT              = 0    -- PSRC-mte.1: 1 = internal caller, no scoping
 ) AS
 BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
+
+    -- PSRC-mte.1: a scoped caller may only touch a project in their own agency.
+    IF @BypassTenancy = 0 AND NOT EXISTS (SELECT 1 FROM tip.Project WHERE Id = @Id AND AgencyId = @TenantAgencyId)
+        THROW 50403, 'Tenancy: project is not in the caller''s agency.', 1;
+    -- PSRC-mte.1: a scoped caller may only name their own agency.
+    IF @BypassTenancy = 0 AND (@TenantAgencyId IS NULL OR @AgencyId IS NULL OR @AgencyId <> @TenantAgencyId)
+        THROW 50403, 'Tenancy: agency is not the caller''s agency.', 1;
 
     BEGIN TRANSACTION;
 
@@ -375,4 +384,6 @@ BEGIN
         THROW;
     END CATCH;
 END;
+
+
 GO

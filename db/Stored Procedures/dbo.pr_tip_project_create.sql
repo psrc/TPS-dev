@@ -2,7 +2,6 @@ SET QUOTED_IDENTIFIER ON
 GO
 SET ANSI_NULLS ON
 GO
-
 /*
 ==================================================
 Stored Procedure: dbo.pr_tip_project_create
@@ -48,7 +47,7 @@ Business Rules:
     - No validation on ProjectCode uniqueness (handled by database constraints)
 ==================================================
 */
-
+-- Modified:    2026-09-12 - PSRC-mte.1 tenancy scoping (@TenantAgencyId/@BypassTenancy)
 CREATE PROCEDURE [dbo].[pr_tip_project_create]
 (
     @UserId      UNIQUEIDENTIFIER -- User creating the project
@@ -57,9 +56,14 @@ CREATE PROCEDURE [dbo].[pr_tip_project_create]
 ,   @Title       NVARCHAR(255) -- Project title
 ,   @Description NVARCHAR(MAX) -- Project description
 ,   @TipId       UNIQUEIDENTIFIER = NULL -- Optional TIP to add project to
+,   @TenantAgencyId UNIQUEIDENTIFIER = NULL -- PSRC-mte.1: caller's agency (NULL = none)
+,   @BypassTenancy  BIT              = 0    -- PSRC-mte.1: 1 = internal caller, no scoping
 ) AS
 BEGIN
     SET NOCOUNT ON;
+    -- PSRC-mte.1: a scoped caller may only name their own agency.
+    IF @BypassTenancy = 0 AND (@TenantAgencyId IS NULL OR @AgencyId IS NULL OR @AgencyId <> @TenantAgencyId)
+        THROW 50403, 'Tenancy: agency is not the caller''s agency.', 1;
     -- Prevent extra result sets from interfering with SELECT statements
 
     -- Generate a unique identifier for the new project
@@ -129,4 +133,6 @@ BEGIN
         WHERE
             Id = @Id;
 END;
+
+
 GO

@@ -23,10 +23,12 @@ Example Usage:
 
 ==================================================
 */
-
+-- Modified:    2026-09-12 - PSRC-mte.1 tenancy scoping (@TenantAgencyId/@BypassTenancy)
 CREATE PROCEDURE [dbo].[pr_tip_project_dashboard_get]
 (
     @UserId UNIQUEIDENTIFIER -- User requesting dashboard data
+  , @TenantAgencyId UNIQUEIDENTIFIER = NULL -- PSRC-mte.1: caller's agency (NULL = none)
+  , @BypassTenancy  BIT              = 0    -- PSRC-mte.1: 1 = internal caller, no scoping
 )
 AS
     BEGIN
@@ -46,6 +48,7 @@ AS
                       ON proj_tip.TipId                              = tip.Id
             LEFT JOIN tip.Project           AS proj
                       ON proj.Id                                     = proj_tip.ProjectId
+                         AND (@BypassTenancy = 1 OR proj.AgencyId = @TenantAgencyId) -- PSRC-mte.1
             LEFT JOIN tip.ProjectAmendment  AS proj_amend
                       ON proj_amend.ProjectId                        = proj.Id
             LEFT JOIN tip.Amendment         AS amendment

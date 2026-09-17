@@ -49,7 +49,7 @@ Business Rules:
     - Returns complete updated contact record including system-generated fields
 ==================================================
 */
-
+-- Modified:    2026-09-12 - PSRC-mte.1 tenancy scoping (@TenantAgencyId/@BypassTenancy)
 CREATE PROCEDURE [dbo].[pr_contact_update]
 (
     @UserId    UNIQUEIDENTIFIER -- User performing the update
@@ -61,9 +61,17 @@ CREATE PROCEDURE [dbo].[pr_contact_update]
 ,   @Phone     NVARCHAR(15) = NULL -- Contact's phone number (optional)
 ,   @PhoneExt  NVARCHAR(50) = NULL -- Phone extension (optional)
 ,   @Notes     NVARCHAR(MAX) = NULL -- Additional notes (optional)
+,   @TenantAgencyId UNIQUEIDENTIFIER = NULL -- PSRC-mte.1: caller's agency (NULL = none)
+,   @BypassTenancy  BIT              = 0    -- PSRC-mte.1: 1 = internal caller, no scoping
 ) AS
 BEGIN
     SET NOCOUNT ON; -- Prevent extra result sets from interfering with SELECT statements
+    -- PSRC-mte.1: a scoped caller may only touch a contact in their own agency.
+    IF @BypassTenancy = 0 AND NOT EXISTS (SELECT 1 FROM common.Contact WHERE Id = @Id AND AgencyId = @TenantAgencyId)
+        THROW 50403, 'Tenancy: contact is not in the caller''s agency.', 1;
+    -- PSRC-mte.1: a scoped caller may only name their own agency.
+    IF @BypassTenancy = 0 AND (@TenantAgencyId IS NULL OR @AgencyId IS NULL OR @AgencyId <> @TenantAgencyId)
+        THROW 50403, 'Tenancy: agency is not the caller''s agency.', 1;
     BEGIN TRANSACTION;
 
     BEGIN TRY
@@ -111,4 +119,6 @@ BEGIN
         THROW;
     END CATCH;
 END;
+
+
 GO

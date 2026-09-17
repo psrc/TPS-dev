@@ -5,7 +5,7 @@ CREATE TABLE [forms].[FormFieldOption]
 [Label] [nvarchar] (500) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 [Value] [nvarchar] (500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 [SortOrder] [int] NOT NULL CONSTRAINT [DF_FormFieldOption_SortOrder] DEFAULT ((0)),
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_FormFieldOption_CreatedById] DEFAULT (user_name()),
+[CreatedById] [uniqueidentifier] NOT NULL,
 [CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_FormFieldOption_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
 [UpdatedOn] [datetime2] NULL

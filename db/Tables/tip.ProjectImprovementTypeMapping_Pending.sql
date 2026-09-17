@@ -3,7 +3,7 @@ CREATE TABLE [tip].[ProjectImprovementTypeMapping_Pending]
 [Id] [uniqueidentifier] NOT NULL,
 [ProjectId] [uniqueidentifier] NOT NULL,
 [ImprovementTypeId] [uniqueidentifier] NOT NULL,
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_ProjectImprovementTypeMapping_Pending_CreatedById] DEFAULT (user_name()),
+[CreatedById] [uniqueidentifier] NOT NULL,
 [CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_ProjectImprovementTypeMapping_Pending_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
 [UpdatedOn] [datetime2] NULL

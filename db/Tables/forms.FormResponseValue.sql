@@ -5,15 +5,18 @@ CREATE TABLE [forms].[FormResponseValue]
 [FormFieldId] [uniqueidentifier] NOT NULL,
 [ValueJson] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 [ValueText] AS (json_value([ValueJson],'$.v')) PERSISTED,
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_FormResponseValue_CreatedById] DEFAULT (user_name()),
+[CreatedById] [uniqueidentifier] NOT NULL,
 [CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_FormResponseValue_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
-[UpdatedOn] [datetime2] NULL
+[UpdatedOn] [datetime2] NULL,
+[AgencyId] [uniqueidentifier] NOT NULL
 ) ON [PRIMARY]
 GO
 ALTER TABLE [forms].[FormResponseValue] ADD CONSTRAINT [CK_FormResponseValue_ValueJson_IsJson] CHECK ((isjson([ValueJson])=(1)))
 GO
 ALTER TABLE [forms].[FormResponseValue] ADD CONSTRAINT [PK_FormResponseValue] PRIMARY KEY CLUSTERED ([Id]) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [IX_FormResponseValue_AgencyId] ON [forms].[FormResponseValue] ([AgencyId]) ON [PRIMARY]
 GO
 ALTER TABLE [forms].[FormResponseValue] ADD CONSTRAINT [UQ_FormResponseValue_Assignment_Field] UNIQUE NONCLUSTERED ([FormAssignmentId], [FormFieldId]) ON [PRIMARY]
 GO

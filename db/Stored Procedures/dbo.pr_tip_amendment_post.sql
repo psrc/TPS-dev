@@ -2,11 +2,12 @@ SET QUOTED_IDENTIFIER ON
 GO
 SET ANSI_NULLS ON
 GO
-
 -- =============================================
 -- Author:      john.hunter@triskelle.solutions
 -- Create Date: 2026-02-19
 -- Modified:    2026-04-28 - Promote Project_Pending.ReportDescription to Project on amendment post
+-- Modified:    2026-09-10 - Carry LineageId so a funding row keeps one identity across amendments (PSRC-yh7o)
+-- Modified:    2026-09-12 - PSRC-mte.1 tenancy scoping (@TenantAgencyId/@BypassTenancy)
 -- Description: Posts an amendment by validating review areas, upserting pending
 --              data to main tables, creating posting log entries, and updating
 --              the amendment status to 'posted'.
@@ -25,10 +26,17 @@ GO
 CREATE PROCEDURE [dbo].[pr_tip_amendment_post]
     @UserId      UNIQUEIDENTIFIER
 , @AmendmentId UNIQUEIDENTIFIER
+, @TenantAgencyId UNIQUEIDENTIFIER = NULL -- PSRC-mte.1: caller's agency (NULL = none)
+, @BypassTenancy  BIT              = 0    -- PSRC-mte.1: 1 = internal caller, no scoping
 AS
 BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
+
+    -- PSRC-mte.1: internal-only. This object has no owning agency, so a scoped caller has no
+    -- rows here at all; refusing beats guessing.
+    IF @BypassTenancy = 0
+        THROW 50403, 'Tenancy: pr_tip_amendment_post is internal-only.', 1;
 
     DECLARE @Now DATETIME2(7) = GETUTCDATE();
     DECLARE @PostedStatusId UNIQUEIDENTIFIER;
@@ -268,6 +276,7 @@ BEGIN
                    , FhwaObligatedDate
                    , FhwaObligatedNumber
                    , OriginRecordId
+                   , LineageId
                    , IsActive
                    , CreatedById
                    , CreatedOn)
@@ -286,6 +295,8 @@ BEGIN
           , pfp.FhwaObligatedDate
           , pfp.FhwaObligatedNumber
           , pfp.OriginRecordId
+          -- PSRC-yh7o: posting already preserved OriginRecordId; lineage rides along the same way.
+          , COALESCE(pfp.LineageId, pfp.OriginRecordId)
           , pfp.IsActive
           , @UserId
           , @Now
@@ -411,4 +422,6 @@ BEGIN
         THROW;
     END CATCH;
 END;
+
+
 GO

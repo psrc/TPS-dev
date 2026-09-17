@@ -3,7 +3,7 @@ CREATE TABLE [tip].[ProjectTipMapping]
 [Id] [uniqueidentifier] NOT NULL,
 [ProjectId] [uniqueidentifier] NOT NULL,
 [TipId] [uniqueidentifier] NOT NULL,
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_ProjectTipMapping_CreatedById] DEFAULT (user_name()),
+[CreatedById] [uniqueidentifier] NOT NULL,
 [CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_ProjectTipMapping_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
 [UpdatedOn] [datetime2] NULL

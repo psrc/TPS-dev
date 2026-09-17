@@ -10,10 +10,11 @@ CREATE TABLE [forms].[AuditTrail]
 [TargetEntityName] [nvarchar] (200) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 [Details] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 [Outcome] [nvarchar] (100) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_FormsAuditTrail_CreatedById] DEFAULT (user_name()),
+[CreatedById] [uniqueidentifier] NOT NULL,
 [CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_FormsAuditTrail_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
-[UpdatedOn] [datetime2] NULL
+[UpdatedOn] [datetime2] NULL,
+[AgencyId] [uniqueidentifier] NULL
 ) ON [PRIMARY]
 GO
 ALTER TABLE [forms].[AuditTrail] ADD CONSTRAINT [PK_FormsAuditTrail] PRIMARY KEY CLUSTERED ([Id]) ON [PRIMARY]
@@ -21,6 +22,8 @@ GO
 CREATE NONCLUSTERED INDEX [IX_FormsAuditTrail_ActionType] ON [forms].[AuditTrail] ([ActionType]) ON [PRIMARY]
 GO
 CREATE NONCLUSTERED INDEX [IX_FormsAuditTrail_ActorUserId] ON [forms].[AuditTrail] ([ActorUserId]) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [IX_AuditTrail_AgencyId] ON [forms].[AuditTrail] ([AgencyId]) ON [PRIMARY]
 GO
 CREATE NONCLUSTERED INDEX [IX_FormsAuditTrail_TargetEntityType] ON [forms].[AuditTrail] ([TargetEntityType]) ON [PRIMARY]
 GO

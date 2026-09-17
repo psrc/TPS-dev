@@ -10,6 +10,9 @@ GO
 -- Create date:   2025-07-23
 -- Modified:      2026-05-11 - Exclude voided amendments from all dashboard filter views
 -- Modified:      2026-05-13 - Drop 'voided' filter (amendments are now hard-deleted instead of voided)
+-- Modified:      2026-09-09 - PSRC-kikm - return TipId so the edit dialog can preselect the
+--                             amendment's TIP rather than showing a blank selector
+-- Modified:      2026-09-12 - PSRC-mte.1 tenancy scoping (@TenantAgencyId/@BypassTenancy)
 -- Description:   Retrieves TIP amendment dashboard data with project count aggregations
 -- =============================================
 -- Business Context:
@@ -28,9 +31,15 @@ GO
 CREATE PROCEDURE [dbo].[pr_tip_amendment_dashboard_get]
     @UserId UNIQUEIDENTIFIER -- Reserved for future security implementation
   , @Filter NVARCHAR(100)    -- Filter type: 'open', 'open-and-closed', 'administrative'
+  , @TenantAgencyId UNIQUEIDENTIFIER = NULL -- PSRC-mte.1: caller's agency (NULL = none)
+  , @BypassTenancy  BIT              = 0    -- PSRC-mte.1: 1 = internal caller, no scoping
 AS
     BEGIN
         SET NOCOUNT ON;
+        -- PSRC-mte.1: internal-only. This object has no owning agency, so a scoped caller has no
+        -- rows here at all; refusing beats guessing.
+        IF @BypassTenancy = 0
+            THROW 50403, 'Tenancy: pr_tip_amendment_dashboard_get is internal-only.', 1;
 
         -- =============================================
         -- Main Query: Retrieve amendments with aggregated metrics
@@ -42,6 +51,7 @@ AS
                Id                    = amendment.Id
              , AmendmentStatusTypeId = amendment.AmendmentStatusTypeId
              , AmendmentMappedTypeId = amendment.AmendmentMappedTypeId
+             , TipId                 = amendment.TipId
              , Name                  = amendment.Name
              , PsrcDueDate           = amendment.PsrcDueDate
              , TpbReviewDate         = amendment.TpbReviewDate
@@ -90,6 +100,7 @@ AS
                Id                    = AmendmentCTE.Id
              , AmendmentStatusTypeId = AmendmentCTE.AmendmentStatusTypeId
              , AmendmentMappedTypeId = AmendmentCTE.AmendmentMappedTypeId
+             , TipId                 = AmendmentCTE.TipId
              , Name                  = AmendmentCTE.Name
              , PsrcDueDate           = AmendmentCTE.PsrcDueDate
              , TpbReviewDate         = AmendmentCTE.TpbReviewDate
@@ -154,4 +165,6 @@ AS
           , proj_amendment_review_status_type.Description
           , proj_amendment.ProjectAmendmentReviewStatusTypeId;
     END;
+
+
 GO

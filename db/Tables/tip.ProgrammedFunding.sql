@@ -18,7 +18,8 @@ CREATE TABLE [tip].[ProgrammedFunding]
 [CreatedById] [uniqueidentifier] NOT NULL,
 [CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_ProgrammedFunding_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
-[UpdatedOn] [datetime2] NULL
+[UpdatedOn] [datetime2] NULL,
+[LineageId] [uniqueidentifier] NULL
 ) ON [PRIMARY]
 GO
 ALTER TABLE [tip].[ProgrammedFunding] ADD CONSTRAINT [PK_ProgrammedFunding] PRIMARY KEY CLUSTERED ([Id]) ON [PRIMARY]

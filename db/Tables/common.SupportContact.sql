@@ -7,7 +7,7 @@ CREATE TABLE [common].[SupportContact]
 [Value] [nvarchar] (200) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 [Availability] [nvarchar] (100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 [SortId] [int] NOT NULL CONSTRAINT [DF_SupportContact_SortId] DEFAULT ((0)),
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_SupportContact_CreatedById] DEFAULT (user_name()),
+[CreatedById] [uniqueidentifier] NOT NULL,
 [CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_SupportContact_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
 [UpdatedOn] [datetime2] NULL

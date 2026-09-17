@@ -5,6 +5,8 @@ GO
 -- =============================================
 -- Author:      john.hunter@triskelle.solutions
 -- Create date: 2026-05-05
+-- Modified:    2026-09-10 - Carry LineageId so a funding row keeps one identity across amendments (PSRC-yh7o)
+-- Modified:    2026-09-12 - PSRC-mte.1 tenancy scoping (@TenantAgencyId/@BypassTenancy)
 -- Description: Copies a pending project from one amendment into another
 --              non-posted amendment. Unlike pr_tip_project_amendment_move
 --              (which simply rebases the existing ProjectAmendment row to a
@@ -54,16 +56,22 @@ GO
 --    - Review areas for the new ProjectAmendment are regenerated as
 --      'unreviewed' for every active review area type.
 -- =============================================
-CREATE   PROCEDURE [dbo].[pr_tip_project_amendment_copy]
+CREATE PROCEDURE [dbo].[pr_tip_project_amendment_copy]
     @UserId                       UNIQUEIDENTIFIER
   , @SourceAmendmentId            UNIQUEIDENTIFIER
   , @SourceProjectPendingId       UNIQUEIDENTIFIER
   , @TargetAmendmentId            UNIQUEIDENTIFIER
   , @TargetAmendmentSectionTypeId UNIQUEIDENTIFIER
+  , @TenantAgencyId               UNIQUEIDENTIFIER = NULL -- PSRC-mte.1: caller's agency (NULL = none)
+  , @BypassTenancy                BIT              = 0    -- PSRC-mte.1: 1 = internal caller, no scoping
 AS
 BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
+
+    -- PSRC-mte.1: a scoped caller may only touch a pending project in their own agency.
+    IF @BypassTenancy = 0 AND NOT EXISTS (SELECT 1 FROM tip.Project_Pending WHERE Id = @SourceProjectPendingId AND AgencyId = @TenantAgencyId)
+        THROW 50403, 'Tenancy: pending project is not in the caller''s agency.', 1;
 
     DECLARE @SourceProjectAmendmentId UNIQUEIDENTIFIER;
     DECLARE @ProjectId                UNIQUEIDENTIFIER;
@@ -350,6 +358,7 @@ BEGIN
             , FhwaObligatedDate
             , FhwaObligatedNumber
             , OriginRecordId
+            , LineageId
             , IsActive
             , CreatedById
             , CreatedOn)
@@ -371,6 +380,8 @@ BEGIN
                 WHEN pf.OriginRecordId = pf.Id THEN m.NewId          -- Origin: self-reference under new Id
                 ELSE ISNULL(om.NewId, m.NewId)                        -- Non-origin: point at origin's new Id (fallback to self if origin missing)
               END
+            -- PSRC-yh7o: carried through UNCHANGED past the re-keying above.
+            , COALESCE(pf.LineageId, pf.OriginRecordId)
             , pf.IsActive
             , @UserId
             , pf.CreatedOn  -- Preserve original CreatedOn for version ordering
@@ -415,4 +426,6 @@ BEGIN
         THROW;
     END CATCH;
 END;
+
+
 GO

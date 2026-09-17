@@ -10,7 +10,7 @@ CREATE TABLE [reporting].[Report]
 [ReportDefinitionXml] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 [SortId] [int] NOT NULL,
 [IsActive] [bit] NOT NULL CONSTRAINT [DF_Report_IsActive] DEFAULT ((0)),
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_Report_CreatedById] DEFAULT (user_name()),
+[CreatedById] [uniqueidentifier] NOT NULL,
 [CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_Report_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
 [UpdatedOn] [datetime2] NULL

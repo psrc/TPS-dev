@@ -6,6 +6,7 @@ GO
 -- Author:      john.hunter@triskelle.solutions
 -- Create date: 2026-05-11
 -- Modified:    2026-05-13 - Replace 'void' (status flip) with hard delete of Amendment row
+-- Modified:    2026-09-12 - PSRC-mte.1 tenancy scoping (@TenantAgencyId/@BypassTenancy)
 -- Description: Hard-deletes a non-posted TIP Amendment and all pending project
 --              data attached to it, including the Amendment row itself.
 --
@@ -33,13 +34,20 @@ GO
 --              tip.ProgrammedFunding_Pending, tip.ProjectCountyMapping_Pending,
 --              tip.ProjectImprovementTypeMapping_Pending
 -- =============================================
-CREATE   PROCEDURE [dbo].[pr_tip_amendment_delete]
+CREATE PROCEDURE [dbo].[pr_tip_amendment_delete]
     @UserId      UNIQUEIDENTIFIER
 , @AmendmentId UNIQUEIDENTIFIER
+, @TenantAgencyId UNIQUEIDENTIFIER = NULL -- PSRC-mte.1: caller's agency (NULL = none)
+, @BypassTenancy  BIT              = 0    -- PSRC-mte.1: 1 = internal caller, no scoping
 AS
 BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
+
+    -- PSRC-mte.1: internal-only. This object has no owning agency, so a scoped caller has no
+    -- rows here at all; refusing beats guessing.
+    IF @BypassTenancy = 0
+        THROW 50403, 'Tenancy: pr_tip_amendment_delete is internal-only.', 1;
 
     DECLARE @AmendmentStatusCode NVARCHAR(50);
 
@@ -177,4 +185,6 @@ BEGIN
         THROW;
     END CATCH;
 END;
+
+
 GO

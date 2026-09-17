@@ -4,7 +4,7 @@ CREATE TABLE [common].[FaqVote]
 [FaqItemId] [uniqueidentifier] NOT NULL,
 [UserId] [uniqueidentifier] NOT NULL,
 [IsHelpful] [bit] NOT NULL,
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_FaqVote_CreatedById] DEFAULT (user_name()),
+[CreatedById] [uniqueidentifier] NOT NULL,
 [CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_FaqVote_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
 [UpdatedOn] [datetime2] NULL

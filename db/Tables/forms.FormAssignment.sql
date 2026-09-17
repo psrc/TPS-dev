@@ -11,7 +11,7 @@ CREATE TABLE [forms].[FormAssignment]
 [AssignmentDate] [datetime2] NOT NULL CONSTRAINT [DF_FormAssignment_AssignmentDate] DEFAULT (getutcdate()),
 [LastUpdated] [datetime2] NOT NULL CONSTRAINT [DF_FormAssignment_LastUpdated] DEFAULT (getutcdate()),
 [IsDeleted] [bit] NOT NULL CONSTRAINT [DF_FormAssignment_IsDeleted] DEFAULT ((0)),
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_FormAssignment_CreatedById] DEFAULT (user_name()),
+[CreatedById] [uniqueidentifier] NOT NULL,
 [CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_FormAssignment_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
 [UpdatedOn] [datetime2] NULL

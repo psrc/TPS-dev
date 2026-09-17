@@ -31,8 +31,6 @@ CREATE TABLE [common].[Users]
 [BlockReason] [nvarchar] (500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 [UserMetadata] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 [AppMetadata] [nvarchar] (max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-[RefreshTokenHash] [nvarchar] (128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-[RefreshTokenExpiryTime] [datetime2] NULL,
 [MustResetPassword] [bit] NOT NULL CONSTRAINT [DF_Users_MustResetPassword] DEFAULT ((0))
 ) ON [PRIMARY]
 GO

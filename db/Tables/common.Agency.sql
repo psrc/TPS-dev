@@ -11,14 +11,17 @@ CREATE TABLE [common].[Agency]
 [AppendixAGroup] [smallint] NULL,
 [PlaceAggregated] [nvarchar] (60) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 [IsActive] [bit] NULL,
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_Agency_CreatedById] DEFAULT (user_name()),
+[CreatedById] [uniqueidentifier] NOT NULL,
 [CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_Agency_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
 [UpdatedOn] [datetime2] NULL,
-[PrimaryContactUserId] [uniqueidentifier] NULL
+[PrimaryContactUserId] [uniqueidentifier] NULL,
+[IsInternal] [bit] NOT NULL CONSTRAINT [DF_Agency_IsInternal] DEFAULT ((0))
 ) ON [PRIMARY]
 GO
 ALTER TABLE [common].[Agency] ADD CONSTRAINT [PK_Agency_Id] PRIMARY KEY CLUSTERED ([Id]) ON [PRIMARY]
+GO
+CREATE UNIQUE NONCLUSTERED INDEX [UX_Agency_IsInternal] ON [common].[Agency] ([IsInternal]) WHERE ([IsInternal]=(1)) ON [PRIMARY]
 GO
 ALTER TABLE [common].[Agency] ADD CONSTRAINT [FK_Agency_AgencyType] FOREIGN KEY ([AgencyTypeId]) REFERENCES [common].[AgencyType] ([Id])
 GO

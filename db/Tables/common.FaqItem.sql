@@ -7,7 +7,7 @@ CREATE TABLE [common].[FaqItem]
 [HelpfulYes] [int] NOT NULL CONSTRAINT [DF_FaqItem_HelpfulYes] DEFAULT ((0)),
 [HelpfulNo] [int] NOT NULL CONSTRAINT [DF_FaqItem_HelpfulNo] DEFAULT ((0)),
 [SortId] [int] NOT NULL CONSTRAINT [DF_FaqItem_SortId] DEFAULT ((0)),
-[CreatedById] [uniqueidentifier] NOT NULL CONSTRAINT [DF_FaqItem_CreatedById] DEFAULT (user_name()),
+[CreatedById] [uniqueidentifier] NOT NULL,
 [CreatedOn] [datetime2] NOT NULL CONSTRAINT [DF_FaqItem_CreatedOn] DEFAULT (getutcdate()),
 [UpdatedById] [uniqueidentifier] NULL,
 [UpdatedOn] [datetime2] NULL
