@@ -1,6 +1,9 @@
 use TPS_dev
 go
 
+-- create a test procedure that we can use to check that the form actions 
+-- successfully fire it from the form in the front end
+
 drop procedure if exists forms.pr_formaction_test;
 drop table if exists forms.test_cpeak;
 
